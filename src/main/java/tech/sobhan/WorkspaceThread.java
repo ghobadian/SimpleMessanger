@@ -8,21 +8,16 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 
 import static tech.sobhan.Util.convertToJson;
 
 public class WorkspaceThread extends Thread{
     private Socket socketFromClient;
-//    private Host parent;
     private Workspace parent;
-    private final HashMap<Integer, String> idAndUsername;
     private String currentClientUsername;
     private final ArrayList<Client> clients;
 
     public WorkspaceThread(){
-        idAndUsername = new HashMap<>();
         clients = new ArrayList<>();
     }
 
@@ -37,8 +32,9 @@ public class WorkspaceThread extends Thread{
         try {
             DataInputStream in = new DataInputStream(socketFromClient.getInputStream());
             DataOutputStream out = new DataOutputStream(socketFromClient.getOutputStream());
-            while(true){
-                String responseFromClient = in.readUTF();
+            String responseFromClient = "";
+            while(!responseFromClient.equals("disconnect")){
+                responseFromClient = in.readUTF();
                 if(currentClientUsername!=null){
                     System.out.print(currentClientUsername + ": ");
                 }
@@ -59,31 +55,42 @@ public class WorkspaceThread extends Thread{
                 connectClient(token, in, out, socketFromClient);
             }
             case "send-message" -> sendMessage(out, parameters[1]);
-            case "get-chats" -> getChats(in,out);
+            case "get-chats" -> getChats(out);
             case "get-messages" -> getMessages(parameters[1],out);
+            case "disconnect" -> disconnectClient(out);
+            case "read-messages" -> showUnreadMessages(out);
+
         }
     }
 
-    private void getMessages(String usernameOfOtherClient, DataOutputStream out) {
-        JSONArray chats = parent.findChats(currentClientUsername);
-        System.out.println("chats = " + chats);
-        JSONObject[] jsonArray = convertToJson(chats);
-//        System.out.println("jsonArray = " + Arrays.toString(jsonArray));
-        JSONArray output = new JSONArray();
-        for(JSONObject jsonObject : jsonArray){
-            if(jsonObject.get("from").equals(usernameOfOtherClient)){
-                output.add(jsonObject);
-            }
-        }
-
+    private void showUnreadMessages(DataOutputStream out) {
+        JSONArray unreadMessages = parent.getUnreadMessagesOf(currentClientUsername);
         try {
-            out.writeUTF("OK " + output);
+            out.writeUTF("OK " + unreadMessages);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void getChats(DataInputStream in, DataOutputStream out) {
+    private void disconnectClient(DataOutputStream out) {
+        parent.removeUsernameFromConnectedUsernames(currentClientUsername);
+        try {
+            out.writeUTF("disconnect");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void getMessages(String usernameOfOtherClient, DataOutputStream out) {
+        JSONArray messages = parent.findMessages(currentClientUsername,usernameOfOtherClient);
+        try {
+            out.writeUTF("OK " + messages);//todo sus
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void getChats(DataOutputStream out) {
         JSONArray chats = parent.findChats(currentClientUsername);
         try {
             out.writeUTF("OK " + chats);
@@ -96,26 +103,36 @@ public class WorkspaceThread extends Thread{
         JSONObject message = convertToJson(messageString);
         message.put("from", currentClientUsername);
         addSeq(message);
-
+        System.out.println("from: "+ currentClientUsername +" "+ "to: "+ message.get("to"));
         try {
             out.writeUTF("OK " + message.get("seq"));
             String receiverUsername = (String) message.get("to");
-            Socket socketToReceiver = parent.findSocketFromUsername(receiverUsername);
-//            DataInputStream in = new DataInputStream(socketToReceiver.getInputStream());
-            DataOutputStream out2 = new DataOutputStream(socketToReceiver.getOutputStream());
-            String commandToReceiver = "receive-message " + message;
-            out2.writeUTF(commandToReceiver);
-            JSONObject jsonObject1 = new JSONObject();
-            jsonObject1.put("name", receiverUsername);
-            jsonObject1.put("unread_count", 0);//todo add unread messages
-            parent.save(currentClientUsername,jsonObject1);
-            JSONObject jsonObject2 = new JSONObject();
-            jsonObject2.put("name", currentClientUsername);
-            jsonObject2.put("unread_count", 0);//todo add unread messages
-            parent.save(receiverUsername,jsonObject2);
+            if(parent.isConnected(receiverUsername)){
+                message.put("isRead",true);
+                Socket socketToReceiver = parent.findSocketFromUsername(receiverUsername);
+                DataOutputStream out2 = new DataOutputStream(socketToReceiver.getOutputStream());
+                String commandToReceiver = "receive-message " + message;
+                out2.writeUTF(commandToReceiver);
+            }else{
+                message.put("isRead",false);
+            }
+            System.out.println("(temp)" + message);
+            saveMessages(message, currentClientUsername, receiverUsername);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void saveMessages(JSONObject message, String senderUsername, String receiverUsername) {
+        parent.save(message);
+        JSONObject jsonObject1 = new JSONObject();
+        jsonObject1.put("name", receiverUsername);
+        jsonObject1.put("unread_count", 0);//todo add unread messages
+        parent.save(senderUsername,jsonObject1);
+        JSONObject jsonObject2 = new JSONObject();
+        jsonObject2.put("name", senderUsername);
+        jsonObject2.put("unread_count", 0);//todo add unread messages
+        parent.save(receiverUsername,jsonObject2);
     }
 
     private void addSeq(JSONObject message) {
@@ -130,18 +147,15 @@ public class WorkspaceThread extends Thread{
     private void connectClient(String token, DataInputStream in, DataOutputStream out, Socket socketFromClient) {
         try{
             int idOfClient = requestIdFromServer(token);
-            String usernameOfClient;
-            if(idAndUsername.get(idOfClient)==null){
+            if(parent.findUsername(idOfClient)==null){
                 out.writeUTF("username?");
-                usernameOfClient = in.readUTF();
-                idAndUsername.put(idOfClient,usernameOfClient);
-                currentClientUsername = usernameOfClient;
-                out.writeUTF("OK");
-            }else{
-                return;
+                String usernameOfClient = in.readUTF();
+                parent.save(idOfClient,usernameOfClient);
+                parent.save(usernameOfClient,socketFromClient);
             }
-            parent.save(usernameOfClient,socketFromClient);
-//            usernameAndSocket.put(usernameOfClient,socketFromClient);
+            out.writeUTF("OK");
+            currentClientUsername = parent.findUsername(idOfClient);
+            parent.saveConnectedUsername(currentClientUsername);
         }catch(IOException e){
             e.printStackTrace();
         }

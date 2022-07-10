@@ -30,6 +30,7 @@ public class UtilTest {
         JSONObject json2 = new JSONObject();
         json2.put("type","text");
         json2.put("body","salam kako");
+
         JSONObject json3 = new JSONObject();
         json3.put("type","text");
         json3.put("body","salam kako");

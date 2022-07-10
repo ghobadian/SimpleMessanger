@@ -6,7 +6,6 @@ import org.json.simple.JSONObject;
 
 import java.net.*;
 import java.io.*;
-import java.util.Arrays;
 import java.util.Scanner;
 
 import static tech.sobhan.Constants.SERVER_ADDRESS;
@@ -17,11 +16,10 @@ public class Client{
     private String phoneNumber;
     private String password;
     private int id;
-    private String connectedWorkspaceAddress;
-    private int connectedWorkspacePort;
 
     private final Scanner scanner = new Scanner(System.in);
     private Socket socketToWorkspace;
+    private Thread otherDevicesThread;
 
     public Client(String phoneNumber, String password, int id) {
         this.phoneNumber = phoneNumber;
@@ -34,33 +32,98 @@ public class Client{
     }
 
     public void run(){
-        try(DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream())) {
-            String command = "";
-            while(!command.equals("disconnect")){
-                command= scanner.nextLine();//todo sus
-//                command = in.readUTF();
-                handleCommand(command);
+        Thread userThread = new Thread(this::getInputFromUser);
+        userThread.start();
+
+//        otherDevicesThread = new Thread(this::getInputFromOtherDevices);
+//        otherDevicesThread.start();
+    }
+
+    private void getInputFromUser() {
+        String command;
+        while(true){
+            command = scanner.nextLine();
+            System.out.println("command = " + command);
+            handleCommand(command);
+            System.out.println("from after handleCommand()");
+        }
+    }
+
+    private void getInputFromOtherDevices() {
+        System.out.println("getInputFromOtherDevices() is opened");
+        String response = "";
+        try {
+            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
+            while(!response.equals("disconnect")){//todo
+                try {
+                    response = in.readUTF();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                if(response.startsWith("receive message")){
+                    receiveMessage(response.split(" ",2)[1]);
+                }else{
+                System.out.println(response);
+                }
+//                handleCommand(response);//todo it is only used for receiving messages therefore useless
             }
+            socketToWorkspace = null;
+            in.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
-//                out.writeUTF(command);
+//        System.out.println("getInputFromOtherDevices() is closed");
     }
 
     private void handleCommand(String command) {
         String[] parameters = command.split(" ");
         String mainCommand = parameters[0];
+        if(isRelatedToWorkspace(mainCommand) && socketToWorkspace==null){
+            System.out.println("You are not connected to a workspace");
+            return;
+        }
         switch (mainCommand){
             case "register" -> requestRegistering(command);
             case "login" -> requestLogin(command);
             case "create-workspace" -> requestCreateWorkspace(command);
-            case "connect" -> requestConnectToWorkspace(command);
+            case "connect-workspace" -> requestConnectToWorkspace(command);
             case "send-message" -> requestSendMessage(command);
-            case "receive-message" -> waitForMessage();
+//            case "receive-message" -> receiveMessage(command.split(" ",2)[1]);
             case "get-chats" -> requestGetChats();
             case "get-messages" -> requestGetMessages(parameters[1]);
+            case "read-messages" -> requestSeeUnreadMessages();
+            case "disconnect" -> requestDisconnect();
         }
+    }
+
+    private void requestSeeUnreadMessages() {
+        try {
+//            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
+            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
+            out.writeUTF("read-messages");
+//            String response = in.readUTF();//todo error when i uncomment them
+//            System.out.println(response);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private boolean isRelatedToWorkspace(String mainCommand) {
+        return mainCommand.equals("send-message") || mainCommand.equals("receive-message") ||
+                mainCommand.equals("get-chats") || mainCommand.equals("get-messages") ||
+                mainCommand.equals("disconnect");
+    }
+
+    private void requestDisconnect() {
+        try {
+            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
+            out.writeUTF("disconnect");
+//            socketToWorkspace = null;
+//            System.out.println("disconnected from workspace");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     public void requestGetMessages(String usernameOfOtherClient) {
@@ -68,8 +131,9 @@ public class Client{
             DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
             DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
             out.writeUTF("get-messages " + usernameOfOtherClient);
-//            String responseChats = in.readUTF();
-//            System.out.println(responseChats);
+            String response = in.readUTF();
+//            System.out.println("i am after (in)");
+            System.out.println(response);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -77,27 +141,20 @@ public class Client{
 
     public void requestGetChats() {
         try {
-            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
             DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
             out.writeUTF("get-chats");
-            String responseChats = in.readUTF();
-            System.out.println(responseChats);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void waitForMessage() {
-        try{
-            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            JSONObject message = convertToJson(in.readUTF().split(" ",2)[1]);
-            message.remove("to");
-            String senderUsername = (String) message.remove("from");
-            if(message.get("type").equals("text")){
-                System.out.println(senderUsername +": "+ message.get("body"));
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+    private void receiveMessage(String messageAsString) {
+        JSONObject message = convertToJson(messageAsString);
+        assert message != null;
+        message.remove("to");
+        String senderUsername = (String) message.remove("from");
+        if(message.get("type").equals("text")){
+            System.out.println(senderUsername +": "+ message.get("body"));
         }
     }
 
@@ -111,8 +168,8 @@ public class Client{
             JSONObject message = convertToJson(parameters[2]);
             message.put("to",receiverUserName);
             out.writeUTF(mainCommand + " " + message);
-            String seqResponse = in.readUTF();
-            System.out.println(seqResponse);
+//            String seqResponse = in.readUTF();
+//            System.out.println(seqResponse);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -170,30 +227,31 @@ public class Client{
             int workspacePort = Integer.parseInt(parameters[2]);
             String token = parameters[3];
 
-
             socketToWorkspace = new Socket(workspaceAddress,workspacePort);
             DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
             DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
             out.writeUTF("connect " + token);
             String responseFromWorkspace = in.readUTF();
             System.out.println(responseFromWorkspace);
+
             if(responseFromWorkspace.equals("username?")){
                 String usernameOfClient = scanner.nextLine();
                 out.writeUTF(usernameOfClient);
-            }else{
-                return false;
+                responseFromWorkspace = in.readUTF();
+                System.out.println(responseFromWorkspace);
             }
-            responseFromWorkspace = in.readUTF();
-            System.out.println(responseFromWorkspace);
-            if(responseFromWorkspace.equals("OK")){
-                connectedWorkspaceAddress = workspaceAddress;
-                connectedWorkspacePort = workspacePort;
-                return true;
+
+            if(!responseFromWorkspace.equals("OK")){
+                return false;
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return false;
+        Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
+        otherDevicesThread.start();
+//        if(!otherDevicesThread.isAlive()){
+//        }
+        return true;
     }
 
     private String requestTokenFromServer(String request) {

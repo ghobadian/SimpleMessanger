@@ -7,7 +7,6 @@ import org.json.simple.parser.ParseException;
 
 import java.util.Arrays;
 
-
 public class Util {
     public static JSONObject convertToJson(String string) {
         JSONParser parser = new JSONParser();
@@ -21,23 +20,17 @@ public class Util {
 
     public static JSONObject[] convertToJson(JSONArray jsonArray){
         String string = jsonArray.toJSONString();
-        string = string.substring(1,string.length()-1);
-//        System.out.println("string = " + string);
+        string = string.replaceAll("},\\{","} , \\{");
+        string = string.replace("[","");
+        string = string.replace("]","");
 
-        String[] sth = string.split("}(,)\\{");
-        sth[0] += "}";
-        for(int i = 1 ;i<sth.length -1 ;i++){
-            sth[i] = "{" + sth[i] + "}";
-        }
-        sth[sth.length -1] = "{" + sth[sth.length -1];
-//        System.out.println("sth = " + Arrays.toString(sth));//todo error
+        String[] jsonsAsString = string.split(" , ");
 
-        JSONObject[] jsons = new JSONObject[sth.length];
-        for(int i=0;i<sth.length;i++){
-            System.out.println("sth["+i+"] = " + sth[i]);
-            jsons[i] = convertToJson(sth[i]);
-            System.out.println("jsons["+i+"] = " + jsons[i]);
+        JSONObject[] jsons = new JSONObject[jsonsAsString.length];
+        for(int i=0;i<jsonsAsString.length;i++){
+            jsons[i] = convertToJson(jsonsAsString[i]);
         }
+
         return jsons;
     }
 }
