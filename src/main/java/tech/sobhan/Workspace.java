@@ -1,48 +1,49 @@
 package tech.sobhan;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-public class Workspace {
-    private String name;
-    private int port;
-    private Host parent;
-    private final HashMap<String,Socket> usernameAndSocket;
-    private final HashMap<String,JSONArray> usernameAndChats;
-    private final HashMap<Integer, String> idAndUsername;
-    private final ArrayList<JSONObject> messages;
-    private final ArrayList<String> connectedUsernames;
+@AllArgsConstructor
+public class Workspace implements Serializable {
+    @Getter private String name;
+    @Getter private String address;
+    @Getter private int port;
+    @Getter private Socket socketToServer;
+    private int seq = 1;
+    private final HashMap<String,Socket> usernameAndSocket = new HashMap<>();
+    private final HashMap<String,JSONArray> usernameAndChats = new HashMap<>();
+    private final HashMap<Integer, String> idAndUsername = new HashMap<>();
+    @Getter private final ArrayList<JSONObject> messages = new ArrayList<>();
+    private final ArrayList<String> connectedUsernames = new ArrayList<>();
+    @Getter private final ArrayList<Group> groups = new ArrayList<>();
 
-    private Workspace(){
-        usernameAndSocket = new HashMap<>();
-        usernameAndChats = new HashMap<>();
-        messages = new ArrayList<>();
-        idAndUsername = new HashMap<>();
-        connectedUsernames = new ArrayList<>();
-    }
-
-    public Workspace(String name, int port, Host parent) {
-        this();
+    public Workspace(String name, int port, String address, Socket socketToServer) {
         this.name = name;
         this.port = port;
-        this.parent = parent;
+        this.address = address;
+        this.socketToServer = socketToServer;
     }
 
     public void run() {
         try(ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("workspace "+ name + " started");
-            while(true){//todo disconnect
+            while(true){
                 System.out.println("====================");
                 System.out.println("Waiting for a Client ...");
                 Socket socketFromClient = serverSocket.accept();
                 System.out.println("Client accepted");
-                WorkspaceThread workspaceThread = new WorkspaceThread(socketFromClient,this);
+                WorkspaceThread workspaceThread = WorkspaceThread.builder()
+                        .socketFromClient(socketFromClient)
+                        .parent(this).build();
                 workspaceThread.start();
             }
         } catch (IOException e) {
@@ -52,30 +53,6 @@ public class Workspace {
 
     public Socket findSocketFromUsername(String username) {
         return usernameAndSocket.get(username);
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public int getPort() {
-        return port;
-    }
-
-    public void setPort(int port) {
-        this.port = port;
-    }
-
-    public Host getParent() {
-        return parent;
-    }
-
-    public void setParent(Host parent) {
-        this.parent = parent;
     }
 
     public void save(String usernameOfClient, Socket socketFromClient) {
@@ -98,13 +75,26 @@ public class Workspace {
         return output != null ? output : new JSONArray();
     }
 
-//    public JSONObject findMessage(String sender,String receiver){
-//        if(sender==null){
-//            for(JSONObject message : messages){
-//                if(message.get())
-//            }
-//        }
-//    }
+    public boolean alreadyChatting(String senderUsername, String receiverUsername){
+        JSONArray chatsOfSender = usernameAndChats.get(senderUsername);
+        for (Object object : chatsOfSender) {
+            JSONObject chat = (JSONObject) object;
+            if(chat.get("name").equals(receiverUsername)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public JSONObject findChatOf(String username1, String username2){
+        for (Object object : findChats(username1)) {
+            JSONObject chat = (JSONObject) object;
+            if(chat.get("name").equals(username2)){
+                return chat;
+            }
+        }
+        return null;
+    }
 
     public JSONArray findMessages(String username1, String username2){
         JSONArray output = new JSONArray();
@@ -116,6 +106,11 @@ public class Workspace {
             }
         }
         return output;
+    }
+
+    public void addSeq(JSONObject message) {
+        message.put("seq",String.valueOf(seq));
+        seq++;
     }
 
     public String findUsername(int idOfClient) {
@@ -152,5 +147,41 @@ public class Workspace {
             }
         }
         return output;
+    }
+
+    public JSONObject findMessage(String seq) {
+        for (JSONObject message : messages) {
+            if(message.get("seq").equals(seq)){
+                return message;
+            }
+        }
+        return null;
+    }
+
+    public void replaceMessage(String seq, String newMessage) {
+        JSONObject oldMessage = findMessage(seq);
+        oldMessage.put("body", newMessage);
+    }
+
+    public void addGroup(Group group){
+        groups.add(group);
+    }
+
+    public boolean isGroup(String username) {
+        for (Group group : groups) {
+            if(group.getName().equals(username)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Group findGroup(String username) {
+        for (Group group : groups) {
+            if(group.getName().equals(username)){
+                return group;
+            }
+        }
+        return null;
     }
 }

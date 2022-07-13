@@ -1,5 +1,8 @@
 package tech.sobhan;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.SneakyThrows;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
@@ -7,62 +10,119 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
-import java.util.ArrayList;
 
-import static tech.sobhan.Util.convertToJson;
+import static tech.sobhan.Util.convertToJSON;
 
+@Builder
+@AllArgsConstructor
 public class WorkspaceThread extends Thread{
     private Socket socketFromClient;
     private Workspace parent;
     private String currentClientUsername;
-    private final ArrayList<Client> clients;
 
-    public WorkspaceThread(){
-        clients = new ArrayList<>();
-    }
-
-    public WorkspaceThread(Socket socketFromClient,Workspace parent){
-        this();
-        this.socketFromClient = socketFromClient;
-        this.parent = parent;
-    }
-
-
+    @SneakyThrows
     public void run() {
-        try {
-            DataInputStream in = new DataInputStream(socketFromClient.getInputStream());
-            DataOutputStream out = new DataOutputStream(socketFromClient.getOutputStream());
-            String responseFromClient = "";
-            while(!responseFromClient.equals("disconnect")){
-                responseFromClient = in.readUTF();
-                if(currentClientUsername!=null){
-                    System.out.print(currentClientUsername + ": ");
-                }
-                System.out.println(responseFromClient);//
-                handleCommand(responseFromClient, in, out, socketFromClient);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        DataInputStream in = new DataInputStream(socketFromClient.getInputStream());
+        DataOutputStream out = new DataOutputStream(socketFromClient.getOutputStream());
+        String responseFromClient = "";
+        while(!responseFromClient.equals("disconnect")){
+            responseFromClient = in.readUTF();
+//            if(currentClientUsername!=null){
+//                System.out.print(currentClientUsername + ": ");
+//            }
+//            System.out.println(responseFromClient);//
+            handleCommand(responseFromClient, in, out);
         }
+        in.close();
+        out.close();
     }
 
-    private void handleCommand(String command, DataInputStream in, DataOutputStream out, Socket socketFromClient) {
+    private void handleCommand(String command, DataInputStream in, DataOutputStream out) {
         String[] parameters = command.split(" ",2);
         String mainCommand = parameters[0];
         switch (mainCommand) {
-            case "connect" -> {
-                String token = parameters[1];
-                connectClient(token, in, out, socketFromClient);
-            }
-            case "send-message" -> sendMessage(out, parameters[1]);
+            case "connect" -> connectClient(parameters[1], in, out);
+            case "send-message" -> sendMessage(command, out);
             case "get-chats" -> getChats(out);
             case "get-messages" -> getMessages(parameters[1],out);
             case "disconnect" -> disconnectClient(out);
             case "read-messages" -> showUnreadMessages(out);
-
+            case "change-message" -> changeMessage(command,out);
+            case "create-group" -> createGroup(parameters[1], out);
+            case "add-to-group" -> addToGroup(command, out);
+            case "join-group" -> joinGroup(command, out);
         }
     }
 
+    @SneakyThrows
+    private void joinGroup(String command, DataOutputStream out) {
+        String[] parameters = command.split(" ");
+        String groupName = parameters[1];
+        Group group = parent.findGroup(groupName);
+        if(group.getAttendees().contains(currentClientUsername)){
+            out.writeUTF("ERROR you have already joined this group");
+            return;
+        }
+        group.addUser(currentClientUsername);
+        sendNotification(groupName, group);
+    }
+
+    private void sendNotification(String groupName, Group group){
+        JSONObject notification = new JSONObject();
+        notification.put("from", group.getName());
+        notification.put("type","text");
+        notification.put("body", currentClientUsername + " joined " + groupName);
+        sendToAllUsersOfGroup(notification, groupName);
+    }
+
+    @SneakyThrows
+    private void addToGroup(String command, DataOutputStream out) {
+        String[] parameters = command.split(" ");
+        String username = parameters[1];
+        String groupName = parameters[2];
+        Group group = parent.findGroup(groupName);
+        if (checkForErrors(username, out, group)) {
+            return;
+        }
+        group.addUser(username);
+        out.writeUTF("OK user '"+username+"' added to group '"+groupName+"'");
+    }
+
+    private boolean checkForErrors(String username, DataOutputStream out, Group group) throws IOException {
+        if(group ==null){
+            out.writeUTF("group not found");
+            return true;
+        }
+        if(parent.findMessages(currentClientUsername, username).isEmpty()){
+            out.writeUTF("you don't know this user");
+            return true;
+        }
+        return false;
+    }
+
+    @SneakyThrows
+    private void createGroup(String groupName, DataOutputStream out) {
+        Group group = Group.builder().name(groupName).build();
+        group.addUser(currentClientUsername);
+        parent.addGroup(group);
+        out.writeUTF("OK group "+groupName+" created");
+    }
+
+    @SneakyThrows
+    private void changeMessage(String command, DataOutputStream out) {
+        String[] parameters = command.split(" ",3);
+        String seq = parameters[1];
+        String newMessage = parameters[2];
+        JSONObject oldMessage = parent.findMessage(seq);
+        if(!oldMessage.get("from").equals(currentClientUsername)){
+            out.writeUTF("ERROR access denied");
+            return;
+        }
+        parent.replaceMessage(seq,newMessage);
+        out.writeUTF("OK");
+    }
+
+    @SneakyThrows
     private void showUnreadMessages(DataOutputStream out) {
         JSONArray unreadMessages = parent.getUnreadMessagesOf(currentClientUsername);
         try {
@@ -84,7 +144,7 @@ public class WorkspaceThread extends Thread{
     private void getMessages(String usernameOfOtherClient, DataOutputStream out) {
         JSONArray messages = parent.findMessages(currentClientUsername,usernameOfOtherClient);
         try {
-            out.writeUTF("OK " + messages);//todo sus
+            out.writeUTF("OK " + messages);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -99,59 +159,74 @@ public class WorkspaceThread extends Thread{
         }
     }
 
-    private void sendMessage(DataOutputStream out, String messageString) {
-        JSONObject message = convertToJson(messageString);
+    @SneakyThrows
+    private void sendMessage(String command, DataOutputStream out) {
+        String[] parameters = command.split(" ",3);
+        JSONObject message = convertToJSON(parameters[2]);
+        assert message != null;
         message.put("from", currentClientUsername);
-        addSeq(message);
-        System.out.println("from: "+ currentClientUsername +" "+ "to: "+ message.get("to"));
-        try {
-            out.writeUTF("OK " + message.get("seq"));
-            String receiverUsername = (String) message.get("to");
-            if(parent.isConnected(receiverUsername)){
-                message.put("isRead",true);
-                Socket socketToReceiver = parent.findSocketFromUsername(receiverUsername);
-                DataOutputStream out2 = new DataOutputStream(socketToReceiver.getOutputStream());
-                String commandToReceiver = "receive-message " + message;
-                out2.writeUTF(commandToReceiver);
-            }else{
-                message.put("isRead",false);
-            }
-            System.out.println("(temp)" + message);
-            saveMessages(message, currentClientUsername, receiverUsername);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void saveMessages(JSONObject message, String senderUsername, String receiverUsername) {
-        parent.save(message);
-        JSONObject jsonObject1 = new JSONObject();
-        jsonObject1.put("name", receiverUsername);
-        jsonObject1.put("unread_count", 0);//todo add unread messages
-        parent.save(senderUsername,jsonObject1);
-        JSONObject jsonObject2 = new JSONObject();
-        jsonObject2.put("name", senderUsername);
-        jsonObject2.put("unread_count", 0);//todo add unread messages
-        parent.save(receiverUsername,jsonObject2);
-    }
-
-    private void addSeq(JSONObject message) {
-        if(message.get("seq")==null){
-            message.put("seq",1);
+        message.put("to", parameters[1]);
+        parent.addSeq(message);
+        out.writeUTF("OK " + message.get("seq"));
+        String receiverUsername = (String) message.get("to");
+        if(parent.isGroup(receiverUsername)){
+            sendToAllUsersOfGroup(message, receiverUsername);
         }else{
-            int seq = (int) message.get("seq");
-            message.put("seq",seq+1);
+            sendToUser(message, receiverUsername);
         }
     }
 
-    private void connectClient(String token, DataInputStream in, DataOutputStream out, Socket socketFromClient) {
+    @SneakyThrows
+    private void sendToAllUsersOfGroup(JSONObject message, String groupName){
+        Group group = parent.findGroup(groupName);
+        message.put("from", groupName);
+        for (String attendee : group.getAttendees()) {
+            message.put("to",attendee);
+            sendToUser(message, attendee);
+        }
+    }
+
+    @SneakyThrows
+    private void sendToUser(JSONObject message, String receiverUsername){
+        if(parent.isConnected(receiverUsername)){
+            message.put("isRead",true);
+            Socket socketToReceiver = parent.findSocketFromUsername(receiverUsername);
+            DataOutputStream out = new DataOutputStream(socketToReceiver.getOutputStream());
+            String commandToReceiver = "receive-message " + message;
+            out.writeUTF(commandToReceiver);
+        }else{
+            message.put("isRead",false);
+        }
+        parent.save(message);
+        saveChats(message, currentClientUsername, receiverUsername);
+    }
+
+    private void saveChats(JSONObject message, String senderUsername, String receiverUsername) {//todo check this method
+        if(parent.alreadyChatting(senderUsername, receiverUsername)){
+            if(message.get("isRead").equals(false)){
+                JSONObject receiverChat = parent.findChatOf(receiverUsername,senderUsername);
+                receiverChat.putIfAbsent("unread_count", "0");
+                String currentUnreadCountString = (String) receiverChat.get("unread_count");
+                int currentUnreadCount = Integer.parseInt(currentUnreadCountString);
+                receiverChat.put("unread_count", String.valueOf(currentUnreadCount+1) );
+            }
+        }else{
+            JSONObject senderChat = new JSONObject();
+            senderChat.put("name", receiverUsername);
+            parent.save(senderUsername,senderChat);
+
+            JSONObject receiverChat = new JSONObject();
+            receiverChat.put("name", senderUsername);
+            parent.save(receiverUsername,receiverChat);
+        }
+
+    }
+
+    private void connectClient(String token, DataInputStream in, DataOutputStream out) {
         try{
             int idOfClient = requestIdFromServer(token);
             if(parent.findUsername(idOfClient)==null){
-                out.writeUTF("username?");
-                String usernameOfClient = in.readUTF();
-                parent.save(idOfClient,usernameOfClient);
-                parent.save(usernameOfClient,socketFromClient);
+                askClientForUsername(in, out, socketFromClient, idOfClient);
             }
             out.writeUTF("OK");
             currentClientUsername = parent.findUsername(idOfClient);
@@ -162,27 +237,24 @@ public class WorkspaceThread extends Thread{
 
     }
 
-//    private Client findClient(int idOfClient) {
-//        for(Client client : clients){
-//            if(client.getId() == idOfClient){
-//                return client;
-//            }
-//        }
-//        return null;
-//    }
+    private void askClientForUsername(DataInputStream in, DataOutputStream out, Socket socketFromClient, int idOfClient) throws IOException {
+        out.writeUTF("username?");
+        String usernameOfClient = in.readUTF();
+        parent.save(idOfClient,usernameOfClient);
+        parent.save(usernameOfClient, socketFromClient);
+    }
 
     private int requestIdFromServer(String token) {
         String whoisRequest = "whois "+ token;
         try {
-            Socket socketToServer = parent.getParent().getSocketToServer();
+            Socket socketToServer = parent.getSocketToServer();
             DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
             DataInputStream in = new DataInputStream(socketToServer.getInputStream());
             out.writeUTF(whoisRequest);
             String responseForWhoisFromServer = in.readUTF();
             System.out.println(responseForWhoisFromServer);//
             if(responseForWhoisFromServer.startsWith("OK")){
-                int idOfClient = Integer.parseInt(responseForWhoisFromServer.split(" ")[1]);
-                return idOfClient;
+                return Integer.parseInt(responseForWhoisFromServer.split(" ")[1]);
             }
         } catch (IOException e) {
             e.printStackTrace();

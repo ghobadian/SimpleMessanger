@@ -1,15 +1,23 @@
 package tech.sobhan;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import static tech.sobhan.DataGenerator.generateToken;
 
+@Builder
+@AllArgsConstructor
+@ToString
+@EqualsAndHashCode
 public class Token {
-    private String token;
-    private long startingTime;
+    private final String token = generateToken();
+    private final long startingTime = System.currentTimeMillis();
 
-    public Token() {
-        this.token = generateToken();;
-        startingTime = System.currentTimeMillis();
-    }
+//    public Token() {
+//        startingTime = ;
+//    }
 
     public boolean checkExpiration(){
         if((System.currentTimeMillis() - startingTime) > 300_000){
@@ -20,23 +28,6 @@ public class Token {
     }
 
     public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
-    }
-
-    public long getStartingTime() {
-        return startingTime;
-    }
-
-    public void setStartingTime(long startingTime) {
-        this.startingTime = startingTime;
-    }
-
-    @Override
-    public String toString() {
         return token;
     }
 }

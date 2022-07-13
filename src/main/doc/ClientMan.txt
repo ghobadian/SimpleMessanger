@@ -1,0 +1,24 @@
+commands:
+    register [phoneNumber] [password]
+    login [phoneNumber] [password]
+    create-workspace [workspace name]
+    connect-workspace [workspace name]
+    send-message [receiver (user/group)] [json message]
+    get-chats
+    get-messages [sender/receiver]
+    change-message [seq] [new message]
+    create-group [groupName] []
+    add-to-group [username] [groupName]
+    join-group [groupName]
+
+examples:
+    register 09031098319 password
+    login 09031098319 password
+    create-workspace company1
+    connect-workspace company1
+    send-message david {"type":"text","body":"salam chetori"}
+    send-message sadegh {"type":"text","body":"Salam khubam"}
+    send-message david {"type":"text","body":"hova chetore?"}
+    send-message sadegh {"type":"text","body":"khub"}
+    send-message david {"type":"text","body":"ok"}
+    send-message david {"type":"text","body":"ok","seq":"23"}

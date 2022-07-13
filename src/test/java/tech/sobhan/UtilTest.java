@@ -7,7 +7,8 @@ import org.junit.Test;
 import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
-import static tech.sobhan.Util.convertToJson;
+import static tech.sobhan.Util.convertToJSON;
+import static tech.sobhan.Util.convertFromStringToArrayOfJSONObjects;
 
 public class UtilTest {
     @Test
@@ -18,7 +19,7 @@ public class UtilTest {
 
         String string = json.toString();
         System.out.println(string);
-        assertEquals(json,convertToJson(string));
+        assertEquals(json, convertToJSON(string));
     }
 
     @Test
@@ -42,6 +43,6 @@ public class UtilTest {
 
         String string = arr.toString();
         System.out.println(string);
-        System.out.println(Arrays.toString(convertToJson(arr)));
+        System.out.println(Arrays.toString(convertFromStringToArrayOfJSONObjects(arr.toString())));
     }
 }

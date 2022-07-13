@@ -1,295 +1,174 @@
 package tech.sobhan;
 
-// A Java program for a Client
-
+import lombok.*;
 import org.json.simple.JSONObject;
 
 import java.net.*;
 import java.io.*;
-import java.util.Scanner;
 
 import static tech.sobhan.Constants.SERVER_ADDRESS;
 import static tech.sobhan.Constants.SERVER_PORT;
-import static tech.sobhan.Util.convertToJson;
+import static tech.sobhan.Util.*;
 
-public class Client{
-    private String phoneNumber;
-    private String password;
-    private int id;
-
-    private final Scanner scanner = new Scanner(System.in);
+@NoArgsConstructor
+@AllArgsConstructor
+@ToString
+@Builder
+public class Client implements Serializable{
+    @Serial
+    private static final long serialVersionUID = 6529685098267757691L;
+    @Getter private String phoneNumber;
+    @Getter private String password;
+    @Getter private int id;
     private Socket socketToWorkspace;
-    private Thread otherDevicesThread;
-
-    public Client(String phoneNumber, String password, int id) {
-        this.phoneNumber = phoneNumber;
-        this.password = password;
-        this.id = id;
-    }
-
-    public Client() {
-
-    }
 
     public void run(){
         Thread userThread = new Thread(this::getInputFromUser);
         userThread.start();
-
-//        otherDevicesThread = new Thread(this::getInputFromOtherDevices);
-//        otherDevicesThread.start();
     }
 
     private void getInputFromUser() {
         String command;
         while(true){
-            command = scanner.nextLine();
+            command = ScannerWrapper.nextLine();
             System.out.println("command = " + command);
             handleCommand(command);
-            System.out.println("from after handleCommand()");
         }
     }
 
+    @SneakyThrows
     private void getInputFromOtherDevices() {
-        System.out.println("getInputFromOtherDevices() is opened");
         String response = "";
-        try {
-            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            while(!response.equals("disconnect")){//todo
-                try {
-                    response = in.readUTF();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                if(response.startsWith("receive message")){
-                    receiveMessage(response.split(" ",2)[1]);
-                }else{
+//        DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
+        while(!response.equals("disconnect")){
+            response = receiveSignal(socketToWorkspace);
+//            response = in.readUTF();
+            if(response.startsWith("receive-message")){
+                receiveMessage(response.split(" ",2)[1]);
+            }else{
                 System.out.println(response);
-                }
-//                handleCommand(response);//todo it is only used for receiving messages therefore useless
             }
-            socketToWorkspace = null;
-            in.close();
-        } catch (IOException e) {
-            e.printStackTrace();
         }
-//        System.out.println("getInputFromOtherDevices() is closed");
+        socketToWorkspace = null;
+//        in.close();
     }
 
-    private void handleCommand(String command) {
-        String[] parameters = command.split(" ");
-        String mainCommand = parameters[0];
-        if(isRelatedToWorkspace(mainCommand) && socketToWorkspace==null){
-            System.out.println("You are not connected to a workspace");
+    @SneakyThrows
+    public void handleCommand(String command) {
+        String mainCommand = command.split(" ")[0];
+        if(isRelatedToServer(mainCommand)){
+          handleServerRelatedCommand(command);
+        } else if(isRelatedToWorkspace(mainCommand)){
+            handleWorkspaceRelateCommand(command);
+        }else if(mainCommand.equals("connect-workspace")){//todo delete this shit
+            requestConnectToWorkspace(command);
+        }
+    }
+
+    @SneakyThrows
+    private void handleServerRelatedCommand(String command) {
+        Socket socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
+//        DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
+//        DataInputStream in = new DataInputStream(socketToServer.getInputStream());
+//        out.writeUTF(command);
+        sendSignal(socketToServer, command);
+        String response = receiveSignal(socketToServer);
+//        String response = in.readUTF();
+        System.out.println(response);//
+        socketToServer.close();
+//        out.close();
+//        in.close(); //todo check for errors
+    }
+
+    private boolean isRelatedToServer(String mainCommand) {
+        String[] mainCommands = {"register", "login", "create-workspace"};//todo maybe add connect-workspace
+        for (String command : mainCommands) {
+            if(command.equals(mainCommand)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @SneakyThrows//todo delete
+    private void handleWorkspaceRelateCommand(String command) {
+        if(socketToWorkspace==null){
+            System.out.println("ERROR You are not connected to a workspace");
             return;
         }
-        switch (mainCommand){
-            case "register" -> requestRegistering(command);
-            case "login" -> requestLogin(command);
-            case "create-workspace" -> requestCreateWorkspace(command);
-            case "connect-workspace" -> requestConnectToWorkspace(command);
-            case "send-message" -> requestSendMessage(command);
-//            case "receive-message" -> receiveMessage(command.split(" ",2)[1]);
-            case "get-chats" -> requestGetChats();
-            case "get-messages" -> requestGetMessages(parameters[1]);
-            case "read-messages" -> requestSeeUnreadMessages();
-            case "disconnect" -> requestDisconnect();
-        }
-    }
-
-    private void requestSeeUnreadMessages() {
-        try {
-//            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
-            out.writeUTF("read-messages");
-//            String response = in.readUTF();//todo error when i uncomment them
-//            System.out.println(response);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+//        DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
+//        out.writeUTF(command);
+        sendSignal(socketToWorkspace,command);
     }
 
     private boolean isRelatedToWorkspace(String mainCommand) {
-        return mainCommand.equals("send-message") || mainCommand.equals("receive-message") ||
-                mainCommand.equals("get-chats") || mainCommand.equals("get-messages") ||
-                mainCommand.equals("disconnect");
-    }
-
-    private void requestDisconnect() {
-        try {
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
-            out.writeUTF("disconnect");
-//            socketToWorkspace = null;
-//            System.out.println("disconnected from workspace");
-        } catch (IOException e) {
-            e.printStackTrace();
+        String[] mainCommands = {"send-message", "get-chats", "get-messages", "read-messages", "disconnect",//todo move somewhere else
+                "change-message", "create-group", "add-to-group", "join-group"};
+        for (String command : mainCommands) {
+            if(command.equals(mainCommand)){
+                return true;
+            }
         }
-
+        return false;
     }
 
-    public void requestGetMessages(String usernameOfOtherClient) {
-        try {
-            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
-            out.writeUTF("get-messages " + usernameOfOtherClient);
-            String response = in.readUTF();
-//            System.out.println("i am after (in)");
-            System.out.println(response);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void requestGetChats() {
-        try {
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
-            out.writeUTF("get-chats");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void receiveMessage(String messageAsString) {
-        JSONObject message = convertToJson(messageAsString);
+    private static void receiveMessage(String messageAsString) {
+        JSONObject message = convertToJSON(messageAsString);
         assert message != null;
-        message.remove("to");
-        String senderUsername = (String) message.remove("from");
+        String senderUsername = (String) message.get("from");
         if(message.get("type").equals("text")){
             System.out.println(senderUsername +": "+ message.get("body"));
         }
     }
 
-    public void requestSendMessage(String command) {
-        try {
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
-            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            String[] parameters = command.split(" ",3);
-            String mainCommand = parameters[0];
-            String receiverUserName = parameters[1];
-            JSONObject message = convertToJson(parameters[2]);
-            message.put("to",receiverUserName);
-            out.writeUTF(mainCommand + " " + message);
-//            String seqResponse = in.readUTF();
-//            System.out.println(seqResponse);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-    }//todo String to Class for token
-
-
-    public void requestRegistering(String request) {
-        try {
-            Socket socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
-            DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-            DataInputStream in = new DataInputStream(socketToServer.getInputStream());
-            out.writeUTF(request);
-            String response = in.readUTF();
-            System.out.println(response);//
-            socketToServer.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void requestLogin(String request) {
-        try {
-            Socket socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
-            DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-            DataInputStream in = new DataInputStream(socketToServer.getInputStream());
-            out.writeUTF(request);
-            String response = in.readUTF();
-            System.out.println(response);//
-            socketToServer.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void requestCreateWorkspace(String request) {
-        try(Socket socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
-            DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-            DataInputStream in = new DataInputStream(socketToServer.getInputStream())){
-
-            out.writeUTF(request);
-            String responseForCreatingWorkspace = in.readUTF();
-            System.out.println(responseForCreatingWorkspace);//
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public boolean requestConnectToWorkspace(String request) {
+    public void requestConnectToWorkspace(String request) {
         try{
             String responseForConnectingToWorkSpaceFromServer = requestTokenFromServer(request);
+            assert responseForConnectingToWorkSpaceFromServer != null;
             String[] parameters = responseForConnectingToWorkSpaceFromServer.split(" ");
             String workspaceAddress = parameters[1];
             int workspacePort = Integer.parseInt(parameters[2]);
             String token = parameters[3];
 
             socketToWorkspace = new Socket(workspaceAddress,workspacePort);
-            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
-            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
-            out.writeUTF("connect " + token);
-            String responseFromWorkspace = in.readUTF();
+//            DataOutputStream out = new DataOutputStream(socketToWorkspace.getOutputStream());
+//            DataInputStream in = new DataInputStream(socketToWorkspace.getInputStream());
+//            out.writeUTF("connect " + token);
+            sendSignal(socketToWorkspace,"connect " + token );
+//            String responseFromWorkspace = in.readUTF();
+            String responseFromWorkspace = receiveSignal(socketToWorkspace);
             System.out.println(responseFromWorkspace);
 
             if(responseFromWorkspace.equals("username?")){
-                String usernameOfClient = scanner.nextLine();
-                out.writeUTF(usernameOfClient);
-                responseFromWorkspace = in.readUTF();
-                System.out.println(responseFromWorkspace);
+                String usernameOfClient = ScannerWrapper.nextLine();
+                sendSignal(socketToWorkspace, usernameOfClient);
+//                out.writeUTF(usernameOfClient);
+//                responseFromWorkspace = in.readUTF();
+                responseFromWorkspace = receiveSignal(socketToWorkspace);
+                System.out.println(responseFromWorkspace);//
             }
 
             if(!responseFromWorkspace.equals("OK")){
-                return false;
+                return;
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
         Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
         otherDevicesThread.start();
-//        if(!otherDevicesThread.isAlive()){
-//        }
-        return true;
     }
 
+    @SneakyThrows
     private String requestTokenFromServer(String request) {
-        try(Socket socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
-             DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-             DataInputStream in = new DataInputStream(socketToServer.getInputStream())){
-
-            out.writeUTF(request);
-            String responseForConnectingToWorkSpaceFromServer = in.readUTF();
-            System.out.println(responseForConnectingToWorkSpaceFromServer);//
-            return responseForConnectingToWorkSpaceFromServer;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public String getPhoneNumber() {
-        return phoneNumber;
-    }
-
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public int getId() {
-        return id;
-    }
-
-    public void setId(int id) {
-        this.id = id;
+        Socket socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
+//        DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
+//        DataInputStream in = new DataInputStream(socketToServer.getInputStream());
+        sendSignal(socketToServer, request);
+//        out.writeUTF(request);
+//        String responseForConnectingToWorkSpaceFromServer = in.readUTF();
+        String responseForConnectingToWorkSpaceFromServer = receiveSignal(socketToServer);
+        System.out.println(responseForConnectingToWorkSpaceFromServer);//
+        return responseForConnectingToWorkSpaceFromServer;
+//        return null;
     }
 }
