@@ -31,9 +31,10 @@ public class WorkspaceTest {
     @Test
     @SneakyThrows
     public void replaceMessageTest(){
-        Workspace workspace = new Workspace("name",1234, "address", null);
+        Workspace workspace = Workspace.builder().workspaceName("name").port(1234)
+                .address("address").socketToServer(null).build();
         JSONObject message = convertToJSON("{\"type\":\"text\",\"body\":\"ok\",\"seq\":23}");
-        workspace.save(message);
+        workspace.saveMessage(message);
         System.out.println(Arrays.toString(workspace.getMessages().toArray()));
         workspace.replaceMessage("23","dalpoozak");
         System.out.println(Arrays.toString(workspace.getMessages().toArray()));

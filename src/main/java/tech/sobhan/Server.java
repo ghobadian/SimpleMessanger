@@ -1,24 +1,29 @@
 package tech.sobhan;
 
 import lombok.Getter;
-import lombok.SneakyThrows;
 
 import java.net.*;
 import java.io.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 
+import static tech.sobhan.Constants.SERVER_ADDRESS;
 import static tech.sobhan.Constants.SERVER_PORT;
 import static tech.sobhan.DataGenerator.*;
 import static tech.sobhan.FileHandler.loadFromFile;
 import static tech.sobhan.FileHandler.saveToFile;
+import static tech.sobhan.Util.receiveSignal;
 import static tech.sobhan.Util.sendSignal;
 
-public class Server implements Serializable{
-    private final HashMap<String,Socket> hostAndSocket = new HashMap<>();
-    @Getter private final ArrayList<Host> hosts = new ArrayList<>();
-    @Getter private final ArrayList<Client> clients = new ArrayList<>();
+public class Server implements Serializable {
+    private final HashMap<String, Socket> hostAndSocket = new HashMap<>();
+    @Getter
+    private final ArrayList<Host> hosts = new ArrayList<>();
+    @Getter
+    private final ArrayList<Client> clients = new ArrayList<>();
+    private final ArrayList<Host> connectedHosts = new ArrayList<>();
+    private final ArrayList<String> nameOfCreatedWorkspaces = new ArrayList<>();
+    private final ArrayList<Integer> usedPorts = new ArrayList<>();
     private Client currentClient = null;
 
     public void run() {
@@ -31,18 +36,15 @@ public class Server implements Serializable{
 
     private void getInputFromOtherDevices() {
         loadFromFile(this);
-        try (ServerSocket server = new ServerSocket(SERVER_PORT)){
+        try (ServerSocket server = new ServerSocket(SERVER_PORT)) {
             System.out.println("Server started");
-            String response = "";
-            while(true){
+            while (true) {
                 System.out.println("====================");
                 System.out.println("Waiting for a Host/Client ...");
                 Socket currentSocket = server.accept();
-                DataInputStream in = new DataInputStream(currentSocket.getInputStream());
-                DataOutputStream out = new DataOutputStream(currentSocket.getOutputStream());
-                response = in.readUTF();
+                String response = receiveSignal(currentSocket);
                 System.out.println(response);//
-                handleCommand(response,in,out,currentSocket);
+                handleCommand(response, currentSocket);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -52,132 +54,307 @@ public class Server implements Serializable{
 
     private void getInputFromUser() {
         String command = "";
-        while(!command.equals("shutdown")){
+        while (!command.equals("shutdown")) {
             command = ScannerWrapper.nextLine();
             System.out.println("command = " + command);
             handleLocalCommand(command);
         }
-        saveToFile(hosts,clients);
+        saveToFile(hosts, clients);
     }
 
     private void handleLocalCommand(String command) {
         switch(command){
-            case "show-hosts" -> hosts.forEach(System.out::println);
+            case "show-hosts" -> showList(hosts);
+            case "show-active-hosts" -> showList(connectedHosts);
+            case "show-clients" -> showList(clients);
         }
     }
 
+    private void showList(ArrayList<?> list) {
+        if(list.isEmpty()){
+            System.out.println("ERROR nothing was found");
+            return;
+        }
+        list.forEach(System.out::println);
+    }
 
-    public void handleCommand(String command, DataInputStream in, DataOutputStream out, Socket currentSocket){
+    public void handleCommand(String command, Socket currentSocket) {
         String[] parameters = command.split(" ");
         String mainCommand = parameters[0];
-        switch(mainCommand){
-            case "create-host" -> createHost(parameters,in,out,currentSocket);
+        switch (mainCommand) {
+            case "create-host" -> createHost(parameters, currentSocket);
             case "connect-host" -> connectHost(parameters, currentSocket);
-            case "register" -> registerClient(parameters,out);
+            case "register" -> registerClient(parameters, currentSocket);
             case "login" -> loginClient(parameters, currentSocket);//todo sus for socket
-            case "create-workspace" -> createWorkspace(parameters,currentSocket);
+            case "create-workspace" -> createWorkspace(parameters, currentSocket);
             case "connect-workspace" -> connectClientToWorkspace(parameters, currentSocket);
+            case "show-workspaces" -> showWorkspaces(currentSocket);
         }
     }
 
-    @SneakyThrows
-    private void connectHost(String[] parameters, Socket currentSocket) {
-        DataOutputStream out = new DataOutputStream(currentSocket.getOutputStream());
-        String address = parameters[1];
-        System.out.println(Arrays.toString(hostAndSocket.entrySet().toArray()));
-        hostAndSocket.put(address,currentSocket);
-        System.out.println(Arrays.toString(hostAndSocket.entrySet().toArray()));
-        out.writeUTF("OK");
+    private void showWorkspaces(Socket socketToClient) {
+        StringBuilder signal = new StringBuilder();
+        for(Host host : connectedHosts){
+            Socket socketToHost = hostAndSocket.get(host.getAddress());
+            sendSignal(socketToHost, "show-workspaces");
+            String workspaces = receiveSignal(socketToHost);
+            if(workspaces.startsWith("OK")){
+                signal.append(workspaces.split(" ", 2)[1]);
+            }
+        }
+        if(signal.isEmpty()) {
+            sendSignal(socketToClient, "no workspaces found");
+            return;
+        }
+        sendSignal(socketToClient, signal.toString());
+    }
 
+    private void connectHost(String[] parameters, Socket socketToHost) {
+        if (foundHostConnectionProblem(parameters, socketToHost)) {
+            return;
+        }
+
+        String address = parameters[1];
+
+        hostAndSocket.put(address, socketToHost);
+        sendSignal(socketToHost, "OK");
+    }
+
+    private boolean foundHostConnectionProblem(String[] parameters, Socket socketToHost) {
+        if(foundProblemInParameters(parameters.length, 2, socketToHost)){
+            return true;
+        }
+
+        String address = parameters[1];
+        if (address == null) {
+            sendSignal(socketToHost, "ERROR Some parameters are missing");
+            return true;
+        }
+
+        return false;
     }
 
     private void connectClientToWorkspace(String[] parameters, Socket socketToClient) {
-        String workspaceName = parameters[1]; //todo workspace names should be identical
+        if(foundWorkspaceConnectionProblem(parameters, socketToClient)){
+            return;
+        }
+        String workspaceName = parameters[1];
         Workspace workspace = findWorkspace(workspaceName);
         Token token = Token.builder().build();
-        try {
-            DataOutputStream out = new DataOutputStream(socketToClient.getOutputStream());//todo make currentSocket local or remove it
-            String responseToClient = "OK "+ workspace.getAddress() +" "+ workspace.getPort() +" "+ token.getToken();
-            out.writeUTF(responseToClient);//todo
-            Socket socketToHostOfThisWorkspace = hostAndSocket.get(workspace.getAddress());
-            DataInputStream in = new DataInputStream(socketToHostOfThisWorkspace.getInputStream());
-            out = new DataOutputStream(socketToHostOfThisWorkspace.getOutputStream());
-            String whois = in.readUTF();
-            System.out.println(whois);//
-            if(!whois.startsWith("whois") || !token.getToken().equals(whois.split(" ")[1])  ||
-                    token.checkExpiration()){
-                return ;
-            }
-            out.writeUTF("OK " + currentClient.getId());
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void createWorkspace(String[] parameters, Socket currentSocket) {
-        String nameOfWorkspace = parameters[1];
-        Host chosenHost = chooseARandomHost();
-        int chosenPort = RANDOM.nextInt(chosenHost.getPortRange()[0],chosenHost.getPortRange()[1]);
-        String commandForHost = "create-workspace " + nameOfWorkspace + " " + chosenPort +" "+ currentClient.getId();
-        if(!requestCreateWorkSpaceFromHost(chosenHost, chosenPort,commandForHost, currentSocket)){
-            System.out.println("error");
+        String responseToClient = "OK " + workspace.getAddress() + " " + workspace.getPort() + " " + token.getToken();
+        sendSignal(socketToClient, responseToClient);
+        Socket socketToHostOfThisWorkspace = hostAndSocket.get(workspace.getAddress());
+        String whois = receiveSignal(socketToHostOfThisWorkspace);
+        System.out.println(whois);//
+        if (foundWorkspaceConnectionWhoisAuthorizationProblem(whois, token, socketToHostOfThisWorkspace)) {
             return;
         }
+
+        sendSignal(socketToHostOfThisWorkspace, "OK " + currentClient.getId());
     }
 
-    private Host chooseARandomHost() {
-        Host host = hosts.get(RANDOM.nextInt(0, hosts.size()));
-        if(hostAndSocket.get(host.getAddress())==null){
-            return chooseARandomHost();
+    private boolean foundWorkspaceConnectionProblem(String[] parameters, Socket socketToClient) {
+        if (foundProblemInParameters(parameters.length, 2, socketToClient)) {
+            return true;
         }
-        return host;
-    }
 
-    private void loginClient(String[] parameters, Socket currentSocket) {
-        String phoneNumber = parameters[1];
-        String password = parameters[2];
-        currentClient = findClient(phoneNumber, password);
-        if(foundLoginProblem(currentSocket)){//todo is already connected
-            sendSignal(currentSocket, "User not found");
-            return;
+        String workspaceName = parameters[1];
+        if (findWorkspace(workspaceName) == null) {
+            sendSignal(socketToClient, "ERROR workspace not found");
+            return true;
         }
-        sendSignal(currentSocket, "OK");
-//        try {
-//            DataOutputStream out = new DataOutputStream(currentSocket.getOutputStream());
-//            out.writeUTF("OK");
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
+
+        return false;
     }
 
-    private boolean foundLoginProblem(Socket currentSocket) {
-        if(currentClient==null) {
+    private boolean foundWorkspaceConnectionWhoisAuthorizationProblem(String whois, Token token, Socket socketToHostOfThisWorkspace) {
+        if (!whois.startsWith("whois")) {
+            sendSignal(socketToHostOfThisWorkspace, "ERROR wrong answer");
+            return true;
+        }
+
+        String receivedToken = whois.split(" ")[1];
+        if (!token.getToken().equals(receivedToken)) {
+            sendSignal(socketToHostOfThisWorkspace, "ERROR tokens are identical");
+            return true;
+        }
+
+        if(token.checkExpiration()){
+            sendSignal(socketToHostOfThisWorkspace, "ERROR token is expired");
             return true;
         }
         return false;
     }
 
-    private void registerClient(String[] parameters, DataOutputStream out) {
-        String phoneNumber = parameters[1];
-        String password = parameters[2];
-        registerClient(phoneNumber, password, out);
-    }
-
-    private void createHost(String[] parameters, DataInputStream in, DataOutputStream out, Socket currentSocket) {
-        String ip = parameters[1];
-        int portStartRange = Integer.parseInt(parameters[2]);
-        int portEndRange = Integer.parseInt(parameters[3]);
-        if(!createHost(ip, portStartRange, portEndRange, in, out, currentSocket)){
+    private void createWorkspace(String[] parameters, Socket socketToClient) {
+        Host chosenHost = chooseARandomHost();
+        if(foundWorkspaceCreationProblem(chosenHost, parameters, socketToClient)){
             return;
         }
-        hostAndSocket.put(hosts.get(hosts.size()-1).getAddress(),currentSocket);
+
+        String nameOfWorkspace = parameters[1];
+
+        int chosenPort = chooseARandomPort(chosenHost.getPortRange()[0], chosenHost.getPortRange()[1]);
+        String commandForHost = "create-workspace " + nameOfWorkspace + " " + chosenPort + " " + currentClient.getId();
+        requestCreateWorkSpaceFromHost(chosenHost, chosenPort, commandForHost, socketToClient);
+    }
+
+    private boolean foundWorkspaceCreationProblem(Host chosenHost, String[] parameters, Socket socketToClient) {
+        if (foundProblemInParameters(parameters.length, 2, socketToClient)) {
+            return true;
+        }
+
+        if(chosenHost == null){
+            sendSignal(socketToClient, "ERROR No active hosts were found");
+            return true;
+        }
+
+        String nameOfWorkspace = parameters[1];
+        if(nameOfCreatedWorkspaces.stream().anyMatch(n -> n.equals(nameOfWorkspace))){
+            sendSignal(socketToClient, "ERROR Workspace with this name already exists");
+            return true;
+        }
+
+        return false;
+    }
+
+    public Host chooseARandomHost() {
+        if (connectedHosts.isEmpty()) {
+            System.err.println("no active hosts were found");
+            return null;
+        }
+        return connectedHosts.get(RANDOM.nextInt(0, connectedHosts.size()));
+    }
+
+    private void loginClient(String[] parameters, Socket socketToClient) {
+        if (foundLoginProblem(parameters, socketToClient)) {//todo is already connected
+            return;
+        }
+        String phoneNumber = parameters[1];
+        String password = parameters[2];
+        Client client = findClient(phoneNumber, password);
+        currentClient = client;
+        sendSignal(socketToClient, "OK");
+    }
+
+    private boolean foundProblemInParameters(int lengthOfParameters, int expectedLength, Socket socket) {
+        if (lengthOfParameters != expectedLength) {
+            sendSignal(socket, "ERROR some parameters are missing");
+            return true;
+        }
+        return false;
+    }
+
+    private boolean foundLoginProblem(String[] parameters, Socket socketToClient) {
+        if (foundProblemInParameters(parameters.length, 3, socketToClient)) {
+            return true;
+        }
+
+        String phoneNumber = parameters[1];
+        String password = parameters[2];
+        if (findClient(phoneNumber, password) == null) {
+            sendSignal(socketToClient, "User not found");
+            return true;
+        }
+
+        return false;
+    }
+
+    private void registerClient(String[] parameters, Socket socket) {
+        if (foundRegistrationProblem(parameters, socket)) {//todo
+            return;
+        }
+
+        String phoneNumber = parameters[1];
+        String password = parameters[2];
+
+        clients.add(Client.builder().phoneNumber(phoneNumber).password(password).id(generateID()).build());
+        sendSignal(socket, "OK");
+    }
+
+    private boolean foundRegistrationProblem(String[] parameters, Socket socket) {
+        if (foundProblemInParameters(parameters.length, 3, socket)) {
+            return true;
+        }
+        String phoneNumber = parameters[1];
+        String password = parameters[2];
+        if (clients.stream().anyMatch(client -> client.getPhoneNumber().equals(phoneNumber))) {
+            sendSignal(socket, "ERROR Somebody has already registered with this phone number");
+            return true;
+        }
+        if (password.length() < 8) {
+            sendSignal(socket, "ERROR password is too short");
+            return true;
+        }
+
+        if (!phoneNumber.matches("\\d{10,11}")) {
+            sendSignal(socket, "ERROR invalid phone number");
+            return true;
+        }
+
+        return false;
+    }
+
+    private void createHost(String[] parameters, Socket socketToHost) {
+        if (foundHostCreationProblem(parameters, socketToHost)) {
+            return;
+        }
+        int portStartRange = Integer.parseInt(parameters[2]);
+        int portEndRange = Integer.parseInt(parameters[3]);
+        int randomPort = chooseARandomPort(portStartRange, portEndRange);
+        sendSignal(socketToHost, "OK " + randomPort);
+        String responseCheck = receiveSignal(socketToHost);
+        System.out.println(responseCheck);//check
+        if (!responseCheck.equals("check")) {
+            sendSignal(socketToHost, "Error sth wrong from host side happened");
+            return;
+        }
+        String hostAddress = parameters[1];//todo clean it
+        if (!sendAndReceiveCodeToHost(socketToHost, hostAddress, randomPort)) {
+            return;
+        }
+        sendSignal(socketToHost, "OK");
+        int[] portRange = {portStartRange, portEndRange};
+        saveHost(socketToHost, hostAddress, portRange);
+    }
+
+    private int chooseARandomPort(int portStartRange, int portEndRange) {
+        int port = RANDOM.nextInt(portStartRange, portEndRange);
+        if(usedPorts.contains(port)){
+            return chooseARandomPort(portStartRange, portEndRange);
+        }else{
+            usedPorts.add(port);
+            return port;
+        }
+    }
+
+    private void saveHost(Socket socketToHost, String hostAddress, int[] portRange) {
+        Host host = Host.builder().address(hostAddress).portRange(portRange).build();
+        hosts.add(host);
+        connectedHosts.add(host);
+        hostAndSocket.put(host.getAddress(), socketToHost);
+    }
+
+    private boolean sendAndReceiveCodeToHost(Socket firstSocketToHost, String hostAddress, int randomPort) {
+        String code = createRandomCode();
+        try (Socket secondSocketToHost = new Socket(hostAddress, randomPort)){
+            sendSignal(secondSocketToHost, "OK " + code);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        String responseCode = receiveSignal(firstSocketToHost);
+        System.out.println(responseCode);//
+        if (!responseCode.equals(code)) {
+            sendSignal(firstSocketToHost, "ERROR invalid code");
+            return false;
+        }
+        return true;
     }
 
     private Workspace findWorkspace(String workspaceName) {
-        for(Host host : hosts){
-            for(Workspace workspace : host.getWorkspaces()){
-                if(workspace.getName().equals(workspaceName)){
+        for (Host host : connectedHosts) {
+            for (Workspace workspace : host.getWorkspaces()) {
+                if (workspace.getWorkspaceName().equals(workspaceName)) {
                     return workspace;
                 }
             }
@@ -185,23 +362,16 @@ public class Server implements Serializable{
         return null;
     }
 
-    private boolean requestCreateWorkSpaceFromHost(Host chosenHost, int chosenPort, String commandForHost, Socket currentSocket) {
-        try {
-            Socket socketToHost = hostAndSocket.get(chosenHost.getAddress());
-            DataInputStream in = new DataInputStream(socketToHost.getInputStream());
-            DataOutputStream out = new DataOutputStream(socketToHost.getOutputStream());
-            out.writeUTF(commandForHost);
-            String response = in.readUTF();
-            if(!response.equals("OK")){
-                System.out.println("error");
-                return false;
-            }
-            out = new DataOutputStream(currentSocket.getOutputStream());
-            out.writeUTF("OK " + chosenHost.getAddress() + " " + chosenPort);//todo why address
-            saveWorkspace(chosenHost, commandForHost);
-        } catch (IOException e) {
-            e.printStackTrace();
+    private boolean requestCreateWorkSpaceFromHost(Host chosenHost, int chosenPort, String commandForHost, Socket socketToClient) {
+        Socket socketToHost = hostAndSocket.get(chosenHost.getAddress());
+        sendSignal(socketToHost, commandForHost);
+        String response = receiveSignal(socketToHost);
+        if (response.equals("ERROR")) {
+            sendSignal(socketToClient, response);
+            return false;
         }
+        sendSignal(socketToClient, "OK " + chosenHost.getAddress() + " " + chosenPort);//todo why address
+        saveWorkspace(chosenHost, commandForHost);
         return true;
     }
 
@@ -210,146 +380,92 @@ public class Server implements Serializable{
         String nameOfWorkSpace = parameters[1];//todo it is duplicate with the ones in createWorkspace() in Host class
         int port = Integer.parseInt(parameters[2]);
         int clientID = Integer.parseInt(parameters[3]);//todo find usage
-        parent.addWorkspace(new Workspace(nameOfWorkSpace,port, parent.getAddress(), parent.getSocketToServer()));//todo i don't like it this way
+        parent.addWorkspace(Workspace.builder().workspaceName(nameOfWorkSpace).port(port).
+                address(parent.getAddress()).socketToServer(parent.getSocketToServer()).build());
+        nameOfCreatedWorkspaces.add(nameOfWorkSpace);
 
-    }
-
-    private Host findHost(String address) {
-        for(Host host: hosts){
-            if(host.getAddress().equals(address)){
-                return host;
-            }
-        }
-        return null;
     }
 
     private Client findClient(String phoneNumber, String password) {
-        for(Client client: clients){
-            if(client.getPhoneNumber().equals(phoneNumber) && client.getPassword().equals(password)){
+        for (Client client : clients) {
+            if (client.getPhoneNumber().equals(phoneNumber) && client.getPassword().equals(password)) {
                 return client;
             }
         }
         return null;
     }
 
-    public boolean createHost(String hostAddress, int portStartRange, int portEndRange, DataInputStream in, DataOutputStream out, Socket currentSocket){
-        try{
-            int[] portRange = {portStartRange,portEndRange};
-            if (foundHostCreationProblem(portStartRange, portEndRange,portRange, hostAddress)){
-                out.writeUTF("NO");
-                return false;
-            }
-            int randomPort = RANDOM.nextInt(portStartRange,portEndRange);
-            out.writeUTF("OK " + randomPort);
-            String responseCheck = in.readUTF();
-            System.out.println(responseCheck);//check
-            if(!responseCheck.equals("check")){
-                return false;
-            }
-            String code = createRandomCode();
-            sendCodeToHost(hostAddress, randomPort, code);
-            String responseCode = in.readUTF();
-            System.out.println(responseCode);//
-            if(!responseCode.equals(code)){
-                out.writeUTF("ERROR invalid code");
-                return false;
-            }
-            out.writeUTF("OK");
-            hosts.add(Host.builder().address(hostAddress).portRange(portRange).build());//todo add host to server
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return true;
+    private void sendCodeToHost(String hostAddress, int randomPort, String code) {
+
+
     }
 
-    private void sendCodeToHost(String hostAddress, int randomPort, String code) throws IOException {
-        Socket socketToHost = new Socket(hostAddress, randomPort);
-        DataOutputStream out2 = new DataOutputStream(socketToHost.getOutputStream());
-        out2.writeUTF("OK " + code);
-        socketToHost.close();
-        out2.close();
-    }
+    private boolean foundHostCreationProblem(String[] parameters,  Socket socketToHost) {
+        if (foundProblemInParameters(parameters.length, 4, socketToHost)) {
+            return true;
+        }
 
-    private boolean foundHostCreationProblem(int portStartRange, int portEndRange, int[] portRange, String address) {
-        if(portRangeConflict(portRange)){
-            System.out.println("ERROR Port in use by another host");
+        int portStartRange = Integer.parseInt(parameters[2]);
+        int portEndRange = Integer.parseInt(parameters[3]);
+        int[] portRange = {portStartRange, portEndRange};
+
+        if (portRangeConflict(portRange)) {
+            sendSignal(socketToHost, "ERROR Port in use by another host");
             return true;
         }
-        if(portStartRange < 10_000) {
-            System.out.println("ERROR Port number must be at least 10000");
+
+        if (portStartRange < 10_000) {
+            sendSignal(socketToHost, "ERROR Port number must be at least 10000");
             return true;
         }
-        if((portEndRange - portStartRange) > 1000){
-            System.out.println("ERROR At most 1000 ports is allowed");
+
+        if ((portEndRange - portStartRange) > 1000) {
+            sendSignal(socketToHost, "ERROR At most 1000 ports is allowed");
             return true;
         }
-        if(foundDuplicateAddresses(address)){
-            System.out.println("Error duplicate addresses detected");
+
+        String hostAddress = parameters[1];
+        if (foundDuplicateAddresses(hostAddress)) {
+            sendSignal(socketToHost, "Error this address is already in use");
             return true;
         }
         return false;
     }
 
     private boolean foundDuplicateAddresses(String address) {
-        for(Host host: hosts){
-            if(host.getAddress().equals(address)){
+        if(address.equals(SERVER_ADDRESS)){
+            return true;
+        }
+        for (Host host : hosts) {
+            if (host.getAddress().equals(address)) {
                 return true;
             }
         }
         return false;
     }
 
-    public void registerClient(String phoneNumber, String password, DataOutputStream out){
-//        if(foundRegisterationProblem){//todo
-//            return;
-//        }
-        clients.add(Client.builder().phoneNumber(phoneNumber).password(password).id(generateID()).build());
-        try {
-            out.writeUTF("OK");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public boolean portRangeConflict(int[] portRange){
-        if(hosts.isEmpty()){
+    public boolean portRangeConflict(int[] portRange) {
+        if (hosts.isEmpty()) {
             return false;
         }
-        for(Host host: hosts){
+        for (Host host : hosts) {
             int hostPortRangeStart = host.getPortRange()[0];
             int hostPortRangeEnd = host.getPortRange()[1];
             int portRangeStart = portRange[0];
             int portRangeEnd = portRange[1];
-//            if(hostPortRangeStart < portRangeStart && hostPortRangeEnd > hostPortRangeStart ){
-////                System.out.println("2) "+Arrays.toString(host.getPortRange()) +"|"+ Arrays.toString(portRange));
-//                return true;
-//            }
-            if(hostPortRangeStart == portRangeStart && hostPortRangeEnd == portRangeEnd){
+            if (hostPortRangeStart == portRangeStart && hostPortRangeEnd == portRangeEnd) {
                 return true;
             }
-
-//            if(host.getPortRange()[0] < portRange[0] && host.getPortRange()[1] > portRange[1] ){
-//                return true;
-//            }
-//            if(host.getPortRange()[0] > portRange[0] && host.getPortRange()[1] < portRange[1]){
-//                return true;
-//            }
-//            if(host.getPortRange()[0] < portRange[0] && host.getPortRange()[1] < portRange[1]){
-//                return true;
-//            }
-//            if(host.getPortRange()[0] > portRange[0] && host.getPortRange()[1] > portRange[1]){
-//                return true;
-//            }
         }
         return false;
     }
 
-    public void addHost(Host host){
+    public void addHost(Host host) {
         hosts.add(host);
     }
 
 
-    public void addClient(Client client){
+    public void addClient(Client client) {
         clients.add(client);
     }
 

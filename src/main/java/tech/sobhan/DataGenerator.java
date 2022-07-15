@@ -22,8 +22,6 @@ public class DataGenerator {
     }
 
     public static String generateAddress(){
-//        address = moveOnePoint(address);
-//        return address;
         return address.substring(0,address.length()-1) + RANDOM.nextInt(10);
     }
 

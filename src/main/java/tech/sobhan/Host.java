@@ -27,55 +27,43 @@ public class Host implements Serializable {
 
     @Getter private final ArrayList<Workspace> workspaces = new ArrayList<>();
 
-    public void requestCreatingHost(String request){
+    public boolean requestCreatingHost(String request){//todo clean it
         try {
             socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
         } catch (IOException e) {
             e.printStackTrace();
         }
-//        DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-//        DataInputStream in = new DataInputStream(socketToServer.getInputStream());
-        sendSignal(socketToServer,request);
-//            out.writeUTF(request);
-//            String response = in.readUTF();
+        sendSignal(socketToServer, request);
         String response = receiveSignal(socketToServer);
         System.out.println(response);//
-        ServerSocket tempServer;//todo sus
         if(!response.startsWith("OK")){
-            return;
+            return false;
         }
         int portForSecondConnection = Integer.parseInt(response.split(" ")[1]);
-        sendSignal(socketToServer, "check");
-//        out.writeUTF("check");
         response = requestCode(portForSecondConnection);
-        if (response == null) return;
+        if (response == null) return false;
         String code = response.split(" ")[1];
-//            in = new DataInputStream(socketToServer.getInputStream());
-//            out = new DataOutputStream(socketToServer.getOutputStream());
         sendSignal(socketToServer, code);
-//            out.writeUTF(code);
-//            response = in.readUTF();
         response = receiveSignal(socketToServer);
         System.out.println(response);//
-        Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
-        otherDevicesThread.start();
+        return true;
     }
 
-    @SneakyThrows
     private String requestCode(int portForSecondConnection) {
-        ServerSocket tempServer;
-        String response;
-        tempServer = new ServerSocket(portForSecondConnection);
-        Socket tempSocket = tempServer.accept();
-        System.out.println("server accepted");
-//            in = new DataInputStream(tempSocket.getInputStream());
-//            response = in.readUTF();
-        response = receiveSignal(tempSocket);
-        System.out.println(response);//
-        if(!response.startsWith("OK")){
-            return null;
+        String response = null;
+        try(ServerSocket tempServer = new ServerSocket(portForSecondConnection)) {
+            sendSignal(socketToServer, "check");
+            Socket tempSocket = tempServer.accept();
+            System.out.println("server accepted");
+            response = receiveSignal(tempSocket);
+            System.out.println(response);//
+            assert response != null;
+            if(!response.startsWith("OK")){
+                return null;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        tempSocket.close();
         return response;
     }
 
@@ -89,7 +77,6 @@ public class Host implements Serializable {
         String command = "";
         while(!command.equals("shutdown")){
             command = ScannerWrapper.nextLine();
-            System.out.println("command = " + command);
             handleLocalCommand(command);
         }
         saveToFile();
@@ -98,57 +85,81 @@ public class Host implements Serializable {
     private void handleLocalCommand(String command) {
         switch(command){
             case "show-workspaces" -> workspaces.forEach(System.out::println);
+            default -> System.out.println("ERROR unknown command");
+            //            case "shutdown" -> shutdownHost();//todo
         }
     }
 
-
-    @SneakyThrows
     private void saveToFile() {//todo move to file handler
         ObjectMapper mapper = new ObjectMapper();
         mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        mapper.writeValue(Paths.get("src/main/resources/host/workspaces.txt").toFile(), workspaces);
-    }
-
-    private void getInputFromOtherDevices() {
         try {
-            DataInputStream in = new DataInputStream(socketToServer.getInputStream());
-            while(true){
-                String command = in.readUTF();
-                System.out.println(command);//
-                handleCommand(command);
-            }
+            mapper.writeValue(Paths.get("src/main/resources/host/workspaces.txt").toFile(), workspaces);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
+    private void getInputFromOtherDevices() {
+        while(true){
+            String command = receiveSignal(socketToServer);
+            System.out.println(command);//
+            assert command != null;
+            handleCommand(command);
+        }
+    }
 
-    public void handleCommand(String command) {
+    public boolean handleCommand(String command) {
         String[] parameters = command.split(" ");
         String mainCommand = parameters[0];
         switch (mainCommand){
             case "create-workspace" -> {
                 Workspace createdWorkspace = createWorkspace(parameters);
-                assert createdWorkspace != null;
+
+                if(createdWorkspace == null){
+                    return false;
+                }
                 workspaces.add(createdWorkspace);
-                createdWorkspace.run();
-//                findWorkspace(parameters[1]).run();
+                createdWorkspace.start();//todo
             }
-            case "create-host" -> requestCreatingHost(command);
+            case "create-host" -> {
+                if(!requestCreatingHost(command)){
+                    return false;
+                }
+                getInputFromOtherDevices();
+                Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
+                otherDevicesThread.start();//todo
+            }
             case "connect-host" -> requestConnectingToHost(parameters);
-//            case "shutdown" -> shutdownHost();//todo
+            case "show-workspaces" -> sendWorkspacesToServer();
         }
+        return true;
     }
 
-    @SneakyThrows
+    private void sendWorkspacesToServer() {
+        if(workspaces.isEmpty()){
+            sendSignal(socketToServer, "ERROR no workspaces were found");
+            return;
+        }
+        StringBuilder workspacesNames = new StringBuilder();
+        workspaces.forEach(workspace -> workspacesNames.append(workspace.getWorkspaceName()).append("\n"));
+        workspacesNames.delete(workspaces.size()-2, workspaces.size());
+        sendSignal(socketToServer, "OK " + workspacesNames);
+    }
+
     private void requestConnectingToHost(String[] parameters) {
-        socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
+        try {
+            socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         String address  = parameters[1];
-        DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-        DataInputStream in = new DataInputStream(socketToServer.getInputStream());
-        out.writeUTF("connect-host " + address );
-        String response = in.readUTF();
+        sendSignal(socketToServer,"connect-host " + address );
+        String response = receiveSignal(socketToServer);
         System.out.println(response);//todo move all out and in to a single method
+        if(response.startsWith("ERROR")){
+            return;
+        }
         Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
         otherDevicesThread.start();
     }
@@ -158,31 +169,23 @@ public class Host implements Serializable {
         int port = Integer.parseInt(parameters[2]);
         int clientID = Integer.parseInt(parameters[3]);//todo find usage
 
-        if(foundWorkspaceCreationProblem(nameOfWorkSpace, port)){
+        if(foundWorkspaceCreationProblem(port)){
             return null;
         }
 
         sendSignal(socketToServer , "OK");
-//        try {
-//            DataOutputStream out = new DataOutputStream(socketToServer.getOutputStream());
-//            out.writeUTF("OK");
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-        return new Workspace(nameOfWorkSpace, port, address, socketToServer);
+        return Workspace.builder().workspaceName(nameOfWorkSpace).port(port).
+                address(address).socketToServer(socketToServer).build();
     }
 
 
 
-    private boolean foundWorkspaceCreationProblem(String nameOfWorkSpace, int port) {
-        if(duplicateWorkspaceFound(nameOfWorkSpace)){
-            System.out.println("ERROR workspace name is already in use");
-            return true;
-        }
+    private boolean foundWorkspaceCreationProblem(int port) {
         if(portInUse(port)){
-            System.out.println("ERROR port already in use by another user");
+            sendSignal(socketToServer, "ERROR port already in use by another workspace");
             return true;
         }
+
         return false;
     }
 
@@ -197,20 +200,11 @@ public class Host implements Serializable {
 
     private boolean duplicateWorkspaceFound(String nameOfWorkSpace) {
         for (Workspace workspace : workspaces) {
-            if(workspace.getName().equals(nameOfWorkSpace)){
+            if(workspace.getWorkspaceName().equals(nameOfWorkSpace)){
                 return true;
             }
         }
         return false;
-    }
-
-    public Workspace findWorkspace(String nameOfWorkSpace){
-        for(Workspace workspace : workspaces){
-            if(workspace.getName().equals(nameOfWorkSpace)){
-                return workspace;
-            }
-        }
-        return null;
     }
 
     public void addWorkspace(Workspace workspace){

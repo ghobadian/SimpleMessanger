@@ -5,9 +5,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
 import java.util.Arrays;
 
@@ -22,16 +20,15 @@ public final class Util {
         return null;
     }
 
-    public static JSONObject[] convertFromStringToArrayOfJSONObjects(String string){
-//        String string = jsonArray.toJSONString();
-        string = string.replaceAll("},\\{","} , \\{");
-        string = string.replace("[","");
-        string = string.replace("]","");
+    public static JSONObject[] convertFromStringToArrayOfJSONObjects(String string) {
+        string = string.replaceAll("},\\{", "} , \\{");
+        string = string.replace("[", "");
+        string = string.replace("]", "");
 
         String[] jsonsAsString = string.split(" , ");
 
         JSONObject[] jsons = new JSONObject[jsonsAsString.length];
-        for(int i=0;i<jsonsAsString.length;i++){
+        for (int i = 0; i < jsonsAsString.length; i++) {
             jsons[i] = convertToJSON(jsonsAsString[i]);
         }
 
@@ -39,30 +36,53 @@ public final class Util {
     }
 
     public static int[] convertToArray(String string) {
-        string = string.replaceAll("\\[","");
-        string = string.replaceAll("]","");
+        string = string.replaceAll("\\[", "");
+        string = string.replaceAll("]", "");
         String[] sth = string.split(",");
         return Arrays.stream(sth).mapToInt(a -> Integer.parseInt(a.trim())).toArray();
     }
 
-    @Synchronized
+    private static final Object sendLock = new Object();
+
+    @Synchronized("sendLock")
     public static void sendSignal(Socket socket, String signal) {
         try {
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
             out.writeUTF(signal);
-//            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static final Object receiveLock = new Object();
+
+    @Synchronized("receiveLock")
+    public static String receiveSignal(Socket socket) {
+        try {
+            DataInputStream in = new DataInputStream(socket.getInputStream());
+            return in.readUTF();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    @Synchronized
+    public static void sendObject(Socket socket, Object object) {
+        try {
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.writeObject(object);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     @Synchronized
-    public static String receiveSignal(Socket socket) {
+    public static Object receiveObject(Socket socket) {
         try {
-            DataInputStream in = new DataInputStream(socket.getInputStream());
-            return in.readUTF();
-            //            in.close();
-        } catch (IOException e) {
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            return in.readObject();
+        } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
         return null;

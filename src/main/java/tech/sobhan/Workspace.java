@@ -1,6 +1,7 @@
 package tech.sobhan;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -12,13 +13,17 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import static tech.sobhan.Util.receiveSignal;
+import static tech.sobhan.Util.sendSignal;
+
 @AllArgsConstructor
-public class Workspace implements Serializable {
-    @Getter private String name;
+@Builder
+public class Workspace extends Thread implements Serializable{
+    @Getter private String workspaceName;
     @Getter private String address;
     @Getter private int port;
     @Getter private Socket socketToServer;
-    private int seq = 1;
+    private int seq;
     private final HashMap<String,Socket> usernameAndSocket = new HashMap<>();
     private final HashMap<String,JSONArray> usernameAndChats = new HashMap<>();
     private final HashMap<Integer, String> idAndUsername = new HashMap<>();
@@ -26,25 +31,20 @@ public class Workspace implements Serializable {
     private final ArrayList<String> connectedUsernames = new ArrayList<>();
     @Getter private final ArrayList<Group> groups = new ArrayList<>();
 
-    public Workspace(String name, int port, String address, Socket socketToServer) {
-        this.name = name;
-        this.port = port;
-        this.address = address;
-        this.socketToServer = socketToServer;
-    }
-
     public void run() {
         try(ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("workspace "+ name + " started");
+            System.out.println("workspace "+ workspaceName + " started");
             while(true){
                 System.out.println("====================");
                 System.out.println("Waiting for a Client ...");
                 Socket socketFromClient = serverSocket.accept();
                 System.out.println("Client accepted");
-                WorkspaceThread workspaceThread = WorkspaceThread.builder()
-                        .socketFromClient(socketFromClient)
-                        .parent(this).build();
-                workspaceThread.start();
+                sendSignal(socketFromClient, "from workspace to client");
+                System.out.println(receiveSignal(socketFromClient));
+//                WorkspaceThread workspaceThread = WorkspaceThread.builder()
+//                        .socketFromClient(socketFromClient)
+//                        .parent(this).build();
+//                workspaceThread.start();
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -55,18 +55,18 @@ public class Workspace implements Serializable {
         return usernameAndSocket.get(username);
     }
 
-    public void save(String usernameOfClient, Socket socketFromClient) {
+    public void saveSocket(String usernameOfClient, Socket socketFromClient) {
         usernameAndSocket.put(usernameOfClient, socketFromClient);
     }
 
-    public void save(String username, JSONObject chat) {
+    public void saveChat(String username, JSONObject chat) {
         if(usernameAndChats.get(username)==null){
             usernameAndChats.put(username, new JSONArray());
         }
         usernameAndChats.get(username).add(chat);
     }
 
-    public void save(JSONObject message){//todo add isRead to message
+    public void saveMessage(JSONObject message){//todo add isRead to message
         messages.add(message);
     }
 
@@ -117,7 +117,7 @@ public class Workspace implements Serializable {
         return idAndUsername.get(idOfClient);
     }
 
-    public void save(int idOfClient, String usernameOfClient) {
+    public void saveIdAndUsername(int idOfClient, String usernameOfClient) {
         idAndUsername.put(idOfClient, usernameOfClient);
     }
 

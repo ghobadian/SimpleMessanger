@@ -2,6 +2,10 @@ package tech.sobhan;
 
 import org.junit.Test;
 
+import java.net.Socket;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static tech.sobhan.FileHandler.loadFromFile;
 import static tech.sobhan.FileHandler.saveToFile;
 
@@ -11,9 +15,12 @@ public class ServerTest {
     public void saveToFileTest(){
 //        Host host1 = new Host("127.1.1.69", new int[]{10000,10100});
         Host host1 = Host.builder().address("127.1.1.69").portRange(new int[]{10000,10100}).build();
-        host1.addWorkspace(new Workspace("company1",10001, host1.getAddress(), host1.getSocketToServer()));
-        host1.addWorkspace(new Workspace("company2",10062, host1.getAddress(), host1.getSocketToServer()));
-        host1.addWorkspace(new Workspace("company3",10043, host1.getAddress(), host1.getSocketToServer()));
+        host1.addWorkspace(Workspace.builder().workspaceName("company1").port(10001)
+                .address(host1.getAddress()).socketToServer(host1.getSocketToServer()).build());
+        host1.addWorkspace(Workspace.builder().workspaceName("company2").port(10062)
+                .address(host1.getAddress()).socketToServer(host1.getSocketToServer()).build());
+        host1.addWorkspace(Workspace.builder().workspaceName("company3").port(10043)
+                .address(host1.getAddress()).socketToServer(host1.getSocketToServer()).build());
         server.addHost(host1);
 
         server.addClient(Client.builder().phoneNumber("09031023519").password("fsdfhlahf").id(1546).build());
@@ -25,8 +32,14 @@ public class ServerTest {
     @Test
     public void loadFromFileTest(){
         loadFromFile(server);
-//        for (Workspace workspace : server.getWorkspaces()) {
-//            System.out.println(workspace);
-//        }
+    }
+
+    @Test
+    public void chooseARandomHostTest(){
+        loadFromFile(server);
+        assertNull(server.chooseARandomHost());
+        Host host = Host.builder().address("1.2.3.4").portRange(new int[]{4,5}).socketToServer(new Socket()).build();
+        server.addHost(host);
+        assertEquals(server.chooseARandomHost(), host);
     }
 }

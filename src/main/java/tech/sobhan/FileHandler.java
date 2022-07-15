@@ -9,7 +9,6 @@ public class FileHandler {
             loadHosts(server);
             loadClients(server);
         } catch (IOException e) {
-            e.printStackTrace();
             System.out.println("no previous files were found to load");
         } catch (ClassNotFoundException e){
             e.printStackTrace();

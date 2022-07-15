@@ -15,9 +15,11 @@ public class WorkspaceThreadTest {
     @SneakyThrows
     public void addSeqTest(){
         Socket socket = new Socket(SERVER_ADDRESS,SERVER_PORT);
-        Workspace workspace = new Workspace("name",1234, "address", socket);
+        Workspace workspace = Workspace.builder().workspaceName("name").port(1234)
+                .address("address").socketToServer(socket).build();
         JSONObject message = convertToJSON("{\"type\":\"text\",\"body\":\"khub\"}");
         System.out.println(message);
+        assert message != null;
         workspace.addSeq(message);
         workspace.addSeq(message);
         workspace.addSeq(message);

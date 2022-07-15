@@ -9,8 +9,8 @@ public class ClientProgram {
         String password = generateToken();
         client.handleCommand("register " + phoneNumber + " " + password);
         client.handleCommand("login " + phoneNumber + " " + password);
-//        client.handleCommand("create-workspace company1");
-//        client.handleCommand("connect-workspace company1");
+        client.handleCommand("create-workspace company1");
+        client.handleCommand("connect-workspace company1");
 //        client.handleCommand("create-group group1");
         client.run();
     }
