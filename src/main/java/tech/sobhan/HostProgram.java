@@ -12,7 +12,7 @@ public class HostProgram {
     private static Host createHost() {
         Host host = Host.builder().build();
         int[] portRange = generatePortRange();
-        if(!host.handleCommand("create-host " + generateAddress() + " "+portRange[0]+ " "+portRange[1])){
+        if(!host.requestCreatingHost("create-host " + generateAddress() + " "+portRange[0]+ " "+portRange[1])){
             return createHost();
         }
         return host;

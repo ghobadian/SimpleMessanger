@@ -56,7 +56,6 @@ public class Server implements Serializable {
         String command = "";
         while (!command.equals("shutdown")) {
             command = ScannerWrapper.nextLine();
-            System.out.println("command = " + command);
             handleLocalCommand(command);
         }
         saveToFile(hosts, clients);
@@ -67,6 +66,7 @@ public class Server implements Serializable {
             case "show-hosts" -> showList(hosts);
             case "show-active-hosts" -> showList(connectedHosts);
             case "show-clients" -> showList(clients);
+            default -> System.out.println("ERROR unknown command");
         }
     }
 
@@ -305,17 +305,19 @@ public class Server implements Serializable {
         sendSignal(socketToHost, "OK " + randomPort);
         String responseCheck = receiveSignal(socketToHost);
         System.out.println(responseCheck);//check
+        if (foundProblemInChecking(socketToHost, responseCheck)) return;
+        String hostAddress = parameters[1];
+        if (!sendAndReceiveCodeToHost(socketToHost, hostAddress, randomPort)) return;
+        sendSignal(socketToHost, "OK");
+        saveHost(socketToHost, hostAddress, portStartRange, portEndRange);
+    }
+
+    private boolean foundProblemInChecking(Socket socketToHost, String responseCheck) {
         if (!responseCheck.equals("check")) {
             sendSignal(socketToHost, "Error sth wrong from host side happened");
-            return;
+            return true;
         }
-        String hostAddress = parameters[1];//todo clean it
-        if (!sendAndReceiveCodeToHost(socketToHost, hostAddress, randomPort)) {
-            return;
-        }
-        sendSignal(socketToHost, "OK");
-        int[] portRange = {portStartRange, portEndRange};
-        saveHost(socketToHost, hostAddress, portRange);
+        return false;
     }
 
     private int chooseARandomPort(int portStartRange, int portEndRange) {
@@ -328,7 +330,8 @@ public class Server implements Serializable {
         }
     }
 
-    private void saveHost(Socket socketToHost, String hostAddress, int[] portRange) {
+    private void saveHost(Socket socketToHost, String hostAddress, int portStartRange, int portEndRange) {
+        int[] portRange = {portStartRange, portEndRange};
         Host host = Host.builder().address(hostAddress).portRange(portRange).build();
         hosts.add(host);
         connectedHosts.add(host);
@@ -366,6 +369,7 @@ public class Server implements Serializable {
         Socket socketToHost = hostAndSocket.get(chosenHost.getAddress());
         sendSignal(socketToHost, commandForHost);
         String response = receiveSignal(socketToHost);
+        System.out.println(response);
         if (response.equals("ERROR")) {
             sendSignal(socketToClient, response);
             return false;

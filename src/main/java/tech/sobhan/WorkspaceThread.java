@@ -129,7 +129,6 @@ public class WorkspaceThread extends Thread{
     private void sendMessage(String command) {
         String[] parameters = command.split(" ",3);
         JSONObject message = convertToJSON(parameters[2]);
-        assert message != null;
         message.put("from", currentClientUsername);
         message.put("to", parameters[1]);
         parent.addSeq(message);

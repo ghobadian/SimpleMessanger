@@ -13,12 +13,9 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import static tech.sobhan.Util.receiveSignal;
-import static tech.sobhan.Util.sendSignal;
-
 @AllArgsConstructor
 @Builder
-public class Workspace extends Thread implements Serializable{
+public class Workspace /*extends Thread*/ implements Serializable{
     @Getter private String workspaceName;
     @Getter private String address;
     @Getter private int port;
@@ -32,23 +29,25 @@ public class Workspace extends Thread implements Serializable{
     @Getter private final ArrayList<Group> groups = new ArrayList<>();
 
     public void run() {
-        try(ServerSocket serverSocket = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket(port)){
             System.out.println("workspace "+ workspaceName + " started");
             while(true){
-                System.out.println("====================");
-                System.out.println("Waiting for a Client ...");
-                Socket socketFromClient = serverSocket.accept();
-                System.out.println("Client accepted");
-                sendSignal(socketFromClient, "from workspace to client");
-                System.out.println(receiveSignal(socketFromClient));
-//                WorkspaceThread workspaceThread = WorkspaceThread.builder()
-//                        .socketFromClient(socketFromClient)
-//                        .parent(this).build();
-//                workspaceThread.start();
+                acceptClient(serverSocket);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void acceptClient(ServerSocket serverSocket) throws IOException {
+        System.out.println("====================");
+        System.out.println("Waiting for a Client ...");
+        Socket socketFromClient = serverSocket.accept();
+        System.out.println("Client accepted");
+        WorkspaceThread workspaceThread = WorkspaceThread.builder()
+                .socketFromClient(socketFromClient)
+                .parent(this).build();
+        workspaceThread.start();
     }
 
     public Socket findSocketFromUsername(String username) {
@@ -99,9 +98,10 @@ public class Workspace extends Thread implements Serializable{
     public JSONArray findMessages(String username1, String username2){
         JSONArray output = new JSONArray();
         for(JSONObject message : messages){
-            if(message.get("from").equals(username1) && message.get("to").equals(username2)){
-                output.add(message);
-            }else if(message.get("from").equals(username2) && message.get("to").equals(username1)){
+            String sender = String.valueOf(message.get("from"));
+            String receiver = String.valueOf(message.get("to"));
+            if((sender.equals(username1) && receiver.equals(username2)) ||
+                    sender.equals(username2) && receiver.equals(username1)){
                 output.add(message);
             }
         }
@@ -136,11 +136,6 @@ public class Workspace extends Thread implements Serializable{
     public JSONArray getUnreadMessagesOf(String username) {
         JSONArray output = new JSONArray();
         for(JSONObject message : messages){
-            System.out.println("message = " + message);
-            System.out.println(message.get("to"));
-            System.out.println(username);
-            System.out.println(message.get("to").equals(username));
-            System.out.println(message.get("isRead").equals(false));
             if(message.get("to").equals(username) && message.get("isRead").equals(false)){
                 message.put("isRead",true);
                 output.add(message);

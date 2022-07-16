@@ -158,18 +158,8 @@ public class Client implements Serializable {
         String workspaceAddress = parameters[1];
         int workspacePort = Integer.parseInt(parameters[2]);
         String token = parameters[3];
-
-//        setSocketToWorkspace(workspaceAddress, workspacePort);
-        try {
-            socketToWorkspace = new Socket(workspaceAddress, workspacePort);
-            System.out.println(receiveSignal(socketToWorkspace));
-            sendSignal(socketToWorkspace, "from client to workspace");
-//            sendSignal(socketToWorkspace, "connect " + token);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        setSocketToWorkspace(workspaceAddress, workspacePort);
+        sendSignal(socketToWorkspace, "connect " + token);
         String responseFromWorkspace = receiveSignal(socketToWorkspace);
         System.out.println(responseFromWorkspace);
         if (responseFromWorkspace.startsWith("ERROR")) {
@@ -180,7 +170,11 @@ public class Client implements Serializable {
     }
 
     public void setSocketToWorkspace(String workspaceAddress, int workspacePort) {
-
+        try {
+            socketToWorkspace = new Socket(workspaceAddress, workspacePort);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void sendUsernameIfNeeded(String responseFromWorkspace) {
@@ -193,14 +187,14 @@ public class Client implements Serializable {
     }
 
     public String requestTokenFromServer(String request) {
+        String responseFromServer = null;
         try (Socket socketToServer = new Socket(SERVER_ADDRESS, SERVER_PORT)) {
             sendSignal(socketToServer, request);
-            String responseFromServer = receiveSignal(socketToServer);
-            System.out.println(responseFromServer);//
-            return responseFromServer;
+            responseFromServer = receiveSignal(socketToServer);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return null;
+        System.out.println(responseFromServer);//
+        return responseFromServer;
     }
 }

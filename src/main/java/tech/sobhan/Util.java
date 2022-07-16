@@ -66,25 +66,4 @@ public final class Util {
         }
         return null;
     }
-
-    @Synchronized
-    public static void sendObject(Socket socket, Object object) {
-        try {
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            out.writeObject(object);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Synchronized
-    public static Object receiveObject(Socket socket) {
-        try {
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            return in.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
 }

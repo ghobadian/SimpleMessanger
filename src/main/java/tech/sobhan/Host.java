@@ -28,11 +28,7 @@ public class Host implements Serializable {
     @Getter private final ArrayList<Workspace> workspaces = new ArrayList<>();
 
     public boolean requestCreatingHost(String request){//todo clean it
-        try {
-            socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        setSocketToServer(SERVER_ADDRESS, SERVER_PORT);
         sendSignal(socketToServer, request);
         String response = receiveSignal(socketToServer);
         System.out.println(response);//
@@ -41,7 +37,6 @@ public class Host implements Serializable {
         }
         int portForSecondConnection = Integer.parseInt(response.split(" ")[1]);
         response = requestCode(portForSecondConnection);
-        if (response == null) return false;
         String code = response.split(" ")[1];
         sendSignal(socketToServer, code);
         response = receiveSignal(socketToServer);
@@ -104,36 +99,39 @@ public class Host implements Serializable {
         while(true){
             String command = receiveSignal(socketToServer);
             System.out.println(command);//
-            assert command != null;
             handleCommand(command);
         }
     }
 
-    public boolean handleCommand(String command) {
+    public void handleCommand(String command) {
         String[] parameters = command.split(" ");
         String mainCommand = parameters[0];
         switch (mainCommand){
-            case "create-workspace" -> {
-                Workspace createdWorkspace = createWorkspace(parameters);
-
-                if(createdWorkspace == null){
-                    return false;
-                }
-                workspaces.add(createdWorkspace);
-                createdWorkspace.start();//todo
-            }
-            case "create-host" -> {
-                if(!requestCreatingHost(command)){
-                    return false;
-                }
-                getInputFromOtherDevices();
-                Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
-                otherDevicesThread.start();//todo
-            }
+            case "create-workspace" -> createWorkspaceAndRun(parameters);
+            case "create-host" -> createHostAndRun(command);
             case "connect-host" -> requestConnectingToHost(parameters);
             case "show-workspaces" -> sendWorkspacesToServer();
         }
+    }
+
+    private boolean createHostAndRun(String command) {
+        if(!requestCreatingHost(command)){
+            return false;
+        }
+        Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
+        otherDevicesThread.start();//todo
         return true;
+    }
+
+    private void createWorkspaceAndRun(String[] parameters) {
+        Workspace createdWorkspace = createWorkspace(parameters);
+
+        if(createdWorkspace == null){
+            return;
+        }
+        workspaces.add(createdWorkspace);
+        createdWorkspace.run();
+//                createdWorkspace.start();//todo ask
     }
 
     private void sendWorkspacesToServer() {
@@ -148,15 +146,11 @@ public class Host implements Serializable {
     }
 
     private void requestConnectingToHost(String[] parameters) {
-        try {
-            socketToServer = new Socket(SERVER_ADDRESS,SERVER_PORT);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        setSocketToServer(SERVER_ADDRESS,SERVER_PORT);
         String address  = parameters[1];
         sendSignal(socketToServer,"connect-host " + address );
         String response = receiveSignal(socketToServer);
-        System.out.println(response);//todo move all out and in to a single method
+        System.out.println(response);
         if(response.startsWith("ERROR")){
             return;
         }
@@ -164,15 +158,21 @@ public class Host implements Serializable {
         otherDevicesThread.start();
     }
 
+    private void setSocketToServer(String serverAddress, int serverPort) {
+        try {
+            socketToServer = new Socket(serverAddress, serverPort);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     private Workspace createWorkspace(String[] parameters){
         String nameOfWorkSpace = parameters[1];
         int port = Integer.parseInt(parameters[2]);
         int clientID = Integer.parseInt(parameters[3]);//todo find usage
-
         if(foundWorkspaceCreationProblem(port)){
             return null;
         }
-
         sendSignal(socketToServer , "OK");
         return Workspace.builder().workspaceName(nameOfWorkSpace).port(port).
                 address(address).socketToServer(socketToServer).build();
