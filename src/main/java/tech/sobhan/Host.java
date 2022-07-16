@@ -114,7 +114,7 @@ public class Host implements Serializable {
         }
     }
 
-    private boolean createHostAndRun(String command) {
+    public boolean createHostAndRun(String command) {
         if(!requestCreatingHost(command)){
             return false;
         }

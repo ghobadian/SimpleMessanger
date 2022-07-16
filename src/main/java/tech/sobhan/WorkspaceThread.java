@@ -19,7 +19,7 @@ public class WorkspaceThread extends Thread{
     public void run() {
         String responseFromClient = "";
         while(!responseFromClient.equals("disconnect")){
-            responseFromClient = receiveSignal(socketFromClient);
+            responseFromClient = receiveSignal(socketFromClient);//todo here
             System.out.println(responseFromClient);
             handleCommand(responseFromClient);
         }

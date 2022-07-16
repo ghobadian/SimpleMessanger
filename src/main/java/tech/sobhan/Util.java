@@ -42,9 +42,9 @@ public final class Util {
         return Arrays.stream(sth).mapToInt(a -> Integer.parseInt(a.trim())).toArray();
     }
 
-    private static final Object sendLock = new Object();
-
-    @Synchronized("sendLock")
+//    private static final Object sendLock = new Object();
+//
+//    @Synchronized("sendLock")
     public static void sendSignal(Socket socket, String signal) {
         try {
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -54,9 +54,9 @@ public final class Util {
         }
     }
 
-    private static final Object receiveLock = new Object();
-
-    @Synchronized("receiveLock")
+//    private static final Object receiveLock = new Object();
+//
+//    @Synchronized("receiveLock")
     public static String receiveSignal(Socket socket) {
         try {
             DataInputStream in = new DataInputStream(socket.getInputStream());
