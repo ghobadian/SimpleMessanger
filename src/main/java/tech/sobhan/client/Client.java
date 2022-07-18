@@ -1,31 +1,30 @@
-package tech.sobhan;
+package tech.sobhan.client;
 
 import lombok.*;
 import org.json.simple.JSONObject;
+import tech.sobhan.utils.ScannerWrapper;
 
 import java.net.*;
 import java.io.*;
+import java.util.Objects;
 
-import static tech.sobhan.Constants.SERVER_ADDRESS;
-import static tech.sobhan.Constants.SERVER_PORT;
-import static tech.sobhan.Util.*;
+import static tech.sobhan.server.Server.SERVER_ADDRESS;
+import static tech.sobhan.server.Server.SERVER_PORT;
+import static tech.sobhan.utils.Util.*;
 
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString
 @Builder
+@Getter
 public class Client implements Serializable {
     @Serial
     private static final long serialVersionUID = 6529685098267757691L;
-    @Getter
     private String phoneNumber;
-    @Getter
     private String password;
-    @Getter
     private int id;
     private Socket socketToWorkspace;
-    @Setter
-    private boolean isLoggedIn = false;
+    @Setter private boolean isLoggedIn = false;
 
     public void run() {
         Thread userThread = new Thread(this::getInputFromUser);
@@ -177,13 +176,31 @@ public class Client implements Serializable {
         }
     }
 
+    public void setSocketToWorkspace(Socket socket) {
+        socketToWorkspace = socket;
+    }
+
     private void sendUsernameIfNeeded(String responseFromWorkspace) {
         if (responseFromWorkspace.equals("username?")) {
-            String usernameOfClient = ScannerWrapper.nextLine();
-            sendSignal(socketToWorkspace, usernameOfClient);
-            responseFromWorkspace = receiveSignal(socketToWorkspace);
-            System.out.println(responseFromWorkspace);//
+            askUsername();
         }
+    }
+
+    private void askUsername() {
+        String responseFromWorkspace;
+        String usernameOfClient = ScannerWrapper.nextLine();
+        while(isDuplicate(usernameOfClient)){
+            System.out.println("ERROR username already exists.");
+            usernameOfClient = ScannerWrapper.nextLine();
+        }
+        sendSignal(socketToWorkspace, usernameOfClient);
+        responseFromWorkspace = receiveSignal(socketToWorkspace);
+        System.out.println(responseFromWorkspace);//
+    }
+
+    private boolean isDuplicate(String usernameOfClient) {
+        sendSignal(socketToWorkspace, "is-duplicate " + usernameOfClient);
+        return Objects.equals(receiveSignal(socketToWorkspace), "YES");
     }
 
     public String requestTokenFromServer(String request) {

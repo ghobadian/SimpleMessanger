@@ -1,16 +1,21 @@
-package tech.sobhan;
+package tech.sobhan.workspace;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import tech.sobhan.models.Group;
 
 import java.net.Socket;
 
-import static tech.sobhan.Util.*;
+import static tech.sobhan.utils.Util.*;
 
 @Builder
 @AllArgsConstructor
+@Getter
+@Setter
 public class WorkspaceThread extends Thread{
     private Socket socketFromClient;
     private Workspace parent;
@@ -79,6 +84,12 @@ public class WorkspaceThread extends Thread{
             sendSignal(socketFromClient, "group not found");
             return true;
         }
+
+        if(!parent.isDuplicate(username) && !parent.foundGroup(username)){
+            sendSignal(socketFromClient, "user not found");
+            return true;
+        }
+
         if(parent.findMessages(currentClientUsername, username).isEmpty()){
             sendSignal(socketFromClient, "you don't know this user");
             return true;
@@ -128,6 +139,9 @@ public class WorkspaceThread extends Thread{
 
     private void sendMessage(String command) {
         String[] parameters = command.split(" ",3);
+        if(foundMessageSendingProblem(parameters)){
+            return;
+        }
         JSONObject message = convertToJSON(parameters[2]);
         message.put("from", currentClientUsername);
         message.put("to", parameters[1]);
@@ -139,6 +153,26 @@ public class WorkspaceThread extends Thread{
         }else{
             sendToUser(message, receiverUsername);
         }
+    }
+
+    private boolean foundMessageSendingProblem(String[] parameters) {
+        if(foundProblemInParameters(parameters.length, 3, socketFromClient)){
+            return true;
+        }
+
+        String sender = currentClientUsername;
+        String receiver = parameters[1];
+        if(sender.equals(receiver)){
+            sendSignal(socketFromClient, "ERROR you can't send message to yourself");
+            return true;
+        }
+
+        if(!parent.isDuplicate(receiver)){
+            sendSignal(socketFromClient, "ERROR username does not exist.");
+            return true;
+        }
+
+        return false;
     }
 
     private void sendToAllUsersOfGroup(JSONObject message, String groupName){
@@ -188,7 +222,7 @@ public class WorkspaceThread extends Thread{
         parent.saveChat(receiverUsername,receiverChat);
     }
 
-    private void connectClient(String token) {
+    public void connectClient(String token) {
         int idOfClient = requestIdFromServer(token);
         if(parent.findUsername(idOfClient)==null){
             askClientForUsername(idOfClient);
@@ -196,17 +230,25 @@ public class WorkspaceThread extends Thread{
         sendSignal(socketFromClient, "OK");
         currentClientUsername = parent.findUsername(idOfClient);
         parent.saveConnectedUsername(currentClientUsername);
-
     }
 
     private void askClientForUsername(int idOfClient){
         sendSignal(socketFromClient, "username?");
-        String usernameOfClient = receiveSignal(socketFromClient);
+        String response = receiveSignal(socketFromClient);
+        String usernameOfClient;
+        while(response.startsWith("is-duplicate")){
+            usernameOfClient = response.split(" ", 2)[1];
+            boolean isDuplicate = parent.isDuplicate(usernameOfClient);
+            sendSignal(socketFromClient, isDuplicate ? "YES" : "NO");
+            response = receiveSignal(socketFromClient);
+//            usernameOfClient = response.split(" ", 2)[1];
+        }
+        usernameOfClient = response;
         parent.saveIdAndUsername(idOfClient,usernameOfClient);
         parent.saveSocket(usernameOfClient, socketFromClient);
     }
 
-    private int requestIdFromServer(String token) {
+    public int requestIdFromServer(String token) {
         String whoisRequest = "whois "+ token;
         Socket socketToServer = parent.getSocketToServer();
         sendSignal(socketToServer, whoisRequest);

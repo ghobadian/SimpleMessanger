@@ -3,8 +3,6 @@ commands:
     login [phoneNumber] [password]
     create-workspace [workspace name]
     connect-workspace [workspace name]
-    show-workspaces
-    show-connected-workspaces
     send-message [receiver (user/group)] [json message]
     get-chats
     get-messages [sender/receiver]
@@ -23,4 +21,9 @@ examples:
     send-message david {"type":"text","body":"hova chetore?"}
     send-message sadegh {"type":"text","body":"khub"}
     send-message david {"type":"text","body":"ok"}
-    send-message david {"type":"text","body":"ok","seq":"23"}
+    change-message 2 Salam badam
+    create-group group1
+    add-to-group sadegh group1
+    join-group group1
+    send-message group1 {"type":"text","body":"hello every one in the group"}
+

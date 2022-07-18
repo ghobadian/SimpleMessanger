@@ -1,6 +1,8 @@
 package tech.sobhan;
 
 import org.junit.Test;
+import tech.sobhan.host.Host;
+import tech.sobhan.workspace.Workspace;
 
 public class HostTest {
     @Test

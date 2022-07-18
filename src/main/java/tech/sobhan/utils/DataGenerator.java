@@ -1,4 +1,4 @@
-package tech.sobhan;
+package tech.sobhan.utils;
 
 import java.security.SecureRandom;
 import java.util.Arrays;

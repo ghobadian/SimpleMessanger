@@ -1,8 +1,10 @@
-package tech.sobhan;
+package tech.sobhan.host;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.*;
+import tech.sobhan.utils.ScannerWrapper;
+import tech.sobhan.workspace.Workspace;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -10,27 +12,27 @@ import java.net.Socket;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 
-import static tech.sobhan.Constants.SERVER_ADDRESS;
-import static tech.sobhan.Constants.SERVER_PORT;
-import static tech.sobhan.Util.receiveSignal;
-import static tech.sobhan.Util.sendSignal;
+import static tech.sobhan.server.Server.SERVER_ADDRESS;
+import static tech.sobhan.server.Server.SERVER_PORT;
+import static tech.sobhan.utils.Util.receiveSignal;
+import static tech.sobhan.utils.Util.sendSignal;
 
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString
 @Builder
+@Getter
 public class Host implements Serializable {
     @Serial private static final long serialVersionUID = 6529685098267757690L;
-    @Getter private String address;
-    @Getter private int[] portRange;
-    @Getter @Setter private Socket socketToServer;
-
+    private String address;
+    private int[] portRange;
+    @Setter private Socket socketToServer;
     @Getter private final ArrayList<Workspace> workspaces = new ArrayList<>();
 
-    public boolean requestCreatingHost(String request){//todo clean it
+    public boolean requestCreatingHost(String request){
         setSocketToServer(SERVER_ADDRESS, SERVER_PORT);
         sendSignal(socketToServer, request);
-        String response = receiveSignal(socketToServer);
+        String response = receiveSignalFromServer(socketToServer);
         System.out.println(response);//
         if(!response.startsWith("OK")){
             return false;
@@ -39,12 +41,16 @@ public class Host implements Serializable {
         response = requestCode(portForSecondConnection);
         String code = response.split(" ")[1];
         sendSignal(socketToServer, code);
-        response = receiveSignal(socketToServer);
+        response = receiveSignalFromServer(socketToServer);
         System.out.println(response);//
         return true;
     }
 
-    private String requestCode(int portForSecondConnection) {
+    public String receiveSignalFromServer(Socket socketToServer) {
+        return receiveSignal(socketToServer);
+    }
+
+    public String requestCode(int portForSecondConnection) {
         String response = null;
         try(ServerSocket tempServer = new ServerSocket(portForSecondConnection)) {
             sendSignal(socketToServer, "check");
@@ -162,7 +168,7 @@ public class Host implements Serializable {
         try {
             socketToServer = new Socket(serverAddress, serverPort);
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("ERROR connection to server failed");
         }
     }
 

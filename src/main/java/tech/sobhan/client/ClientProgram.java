@@ -1,6 +1,6 @@
-package tech.sobhan;
+package tech.sobhan.client;
 
-import static tech.sobhan.DataGenerator.*;
+import static tech.sobhan.utils.DataGenerator.*;
 
 public class ClientProgram {
     public static void main(String[] args){

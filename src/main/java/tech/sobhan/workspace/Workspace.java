@@ -1,10 +1,11 @@
-package tech.sobhan;
+package tech.sobhan.workspace;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import tech.sobhan.models.Group;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -25,7 +26,7 @@ public class Workspace /*extends Thread*/ implements Serializable{
     private final HashMap<String,JSONArray> usernameAndChats = new HashMap<>();
     private final HashMap<Integer, String> idAndUsername = new HashMap<>();
     @Getter private final ArrayList<JSONObject> messages = new ArrayList<>();
-    private final ArrayList<String> connectedUsernames = new ArrayList<>();
+    @Getter private final ArrayList<String> connectedUsernames = new ArrayList<>();
     @Getter private final ArrayList<Group> groups = new ArrayList<>();
 
     public void run() {
@@ -76,6 +77,9 @@ public class Workspace /*extends Thread*/ implements Serializable{
 
     public boolean alreadyChatting(String senderUsername, String receiverUsername){
         JSONArray chatsOfSender = usernameAndChats.get(senderUsername);
+        if(chatsOfSender==null){
+            return false;
+        }
         for (Object object : chatsOfSender) {
             JSONObject chat = (JSONObject) object;
             if(chat.get("name").equals(receiverUsername)){
@@ -109,8 +113,7 @@ public class Workspace /*extends Thread*/ implements Serializable{
     }
 
     public void addSeq(JSONObject message) {
-        message.put("seq",String.valueOf(seq));
-        seq++;
+        message.put("seq",String.valueOf(++seq));
     }
 
     public String findUsername(int idOfClient) {
@@ -178,5 +181,13 @@ public class Workspace /*extends Thread*/ implements Serializable{
             }
         }
         return null;
+    }
+
+    public boolean isDuplicate(String usernameOfClient) {
+        return idAndUsername.containsValue(usernameOfClient);
+    }
+
+    public boolean foundGroup(String groupName) {
+        return groups.stream().anyMatch(group -> group.getName().equals(groupName));
     }
 }

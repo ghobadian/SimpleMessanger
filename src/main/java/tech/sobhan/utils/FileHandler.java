@@ -1,4 +1,8 @@
-package tech.sobhan;
+package tech.sobhan.utils;
+
+import tech.sobhan.client.Client;
+import tech.sobhan.host.Host;
+import tech.sobhan.server.Server;
 
 import java.io.*;
 import java.util.ArrayList;

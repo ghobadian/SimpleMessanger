@@ -3,12 +3,20 @@ package tech.sobhan;
 import lombok.SneakyThrows;
 import org.json.simple.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
+import tech.sobhan.workspace.Workspace;
+import tech.sobhan.workspace.WorkspaceThread;
 
 import java.net.Socket;
 
-import static tech.sobhan.Constants.SERVER_ADDRESS;
-import static tech.sobhan.Constants.SERVER_PORT;
-import static tech.sobhan.Util.convertToJSON;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static tech.sobhan.server.Server.SERVER_ADDRESS;
+import static tech.sobhan.server.Server.SERVER_PORT;
+import static tech.sobhan.utils.Util.convertToJSON;
 
 public class WorkspaceThreadTest {
     @Test
@@ -24,5 +32,19 @@ public class WorkspaceThreadTest {
         workspace.addSeq(message);
         workspace.addSeq(message);
         System.out.println(message);
+    }
+
+    @Test
+    public void connectClientTest(){
+        WorkspaceThread workspaceThreadMock = Mockito.mock(WorkspaceThread.class);
+        Workspace workspaceMock = Mockito.mock(Workspace.class);
+        when(workspaceThreadMock.getParent()).thenReturn(workspaceMock);
+//        workspaceThreadMock.setParent(workspaceMock);
+        when(workspaceThreadMock.requestIdFromServer(anyString())).thenReturn(1234);
+        when(workspaceThreadMock.getParent().findUsername(anyInt())).thenReturn("mmd");
+        workspaceThreadMock.connectClient("");
+        assertEquals(workspaceThreadMock.getCurrentClientUsername(), "mmd");
+        assertTrue(workspaceThreadMock.getParent().getConnectedUsernames().contains("mmd"));
+
     }
 }

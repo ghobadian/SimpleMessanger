@@ -1,6 +1,6 @@
-package tech.sobhan;
+package tech.sobhan.host;
 
-import static tech.sobhan.DataGenerator.*;
+import static tech.sobhan.utils.DataGenerator.*;
 
 
 public class HostProgram {

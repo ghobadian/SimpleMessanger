@@ -1,21 +1,27 @@
-package tech.sobhan;
+package tech.sobhan.server;
 
 import lombok.Getter;
+import tech.sobhan.utils.ScannerWrapper;
+import tech.sobhan.models.Token;
+import tech.sobhan.utils.Util;
+import tech.sobhan.workspace.Workspace;
+import tech.sobhan.client.Client;
+import tech.sobhan.host.Host;
 
 import java.net.*;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import static tech.sobhan.Constants.SERVER_ADDRESS;
-import static tech.sobhan.Constants.SERVER_PORT;
-import static tech.sobhan.DataGenerator.*;
-import static tech.sobhan.FileHandler.loadFromFile;
-import static tech.sobhan.FileHandler.saveToFile;
-import static tech.sobhan.Util.receiveSignal;
-import static tech.sobhan.Util.sendSignal;
+import static tech.sobhan.utils.DataGenerator.*;
+import static tech.sobhan.utils.FileHandler.loadFromFile;
+import static tech.sobhan.utils.FileHandler.saveToFile;
+import static tech.sobhan.utils.Util.receiveSignal;
+import static tech.sobhan.utils.Util.sendSignal;
 
 public class Server implements Serializable {
+    public static final int SERVER_PORT = 8000;
+    public static final String SERVER_ADDRESS = "127.10.10.10";
     private final HashMap<String, Socket> hostAndSocket = new HashMap<>();
     @Getter
     private final ArrayList<Host> hosts = new ArrayList<>();
@@ -37,10 +43,7 @@ public class Server implements Serializable {
     private void getInputFromOtherDevices() {
         loadFromFile(this);
         try (ServerSocket server = new ServerSocket(SERVER_PORT)) {
-            System.out.println("Server started");
             while (true) {
-                System.out.println("====================");
-                System.out.println("Waiting for a Host/Client ...");
                 Socket currentSocket = server.accept();
                 String response = receiveSignal(currentSocket);
                 System.out.println(response);//
@@ -94,6 +97,15 @@ public class Server implements Serializable {
 
     private void showWorkspaces(Socket socketToClient) {
         StringBuilder signal = new StringBuilder();
+        getNameOfWorkspacesFromHost(signal);
+        if(signal.isEmpty()) {
+            sendSignal(socketToClient, "no workspaces found");
+            return;
+        }
+        sendSignal(socketToClient, signal.toString());
+    }
+
+    private void getNameOfWorkspacesFromHost(StringBuilder signal) {
         for(Host host : connectedHosts){
             Socket socketToHost = hostAndSocket.get(host.getAddress());
             sendSignal(socketToHost, "show-workspaces");
@@ -102,11 +114,6 @@ public class Server implements Serializable {
                 signal.append(workspaces.split(" ", 2)[1]);
             }
         }
-        if(signal.isEmpty()) {
-            sendSignal(socketToClient, "no workspaces found");
-            return;
-        }
-        sendSignal(socketToClient, signal.toString());
     }
 
     private void connectHost(String[] parameters, Socket socketToHost) {
@@ -121,7 +128,7 @@ public class Server implements Serializable {
     }
 
     private boolean foundHostConnectionProblem(String[] parameters, Socket socketToHost) {
-        if(foundProblemInParameters(parameters.length, 2, socketToHost)){
+        if(Util.foundProblemInParameters(parameters.length, 2, socketToHost)){
             return true;
         }
 
@@ -154,7 +161,7 @@ public class Server implements Serializable {
     }
 
     private boolean foundWorkspaceConnectionProblem(String[] parameters, Socket socketToClient) {
-        if (foundProblemInParameters(parameters.length, 2, socketToClient)) {
+        if (Util.foundProblemInParameters(parameters.length, 2, socketToClient)) {
             return true;
         }
 
@@ -200,7 +207,7 @@ public class Server implements Serializable {
     }
 
     private boolean foundWorkspaceCreationProblem(Host chosenHost, String[] parameters, Socket socketToClient) {
-        if (foundProblemInParameters(parameters.length, 2, socketToClient)) {
+        if (Util.foundProblemInParameters(parameters.length, 2, socketToClient)) {
             return true;
         }
 
@@ -237,16 +244,8 @@ public class Server implements Serializable {
         sendSignal(socketToClient, "OK");
     }
 
-    private boolean foundProblemInParameters(int lengthOfParameters, int expectedLength, Socket socket) {
-        if (lengthOfParameters != expectedLength) {
-            sendSignal(socket, "ERROR some parameters are missing");
-            return true;
-        }
-        return false;
-    }
-
     private boolean foundLoginProblem(String[] parameters, Socket socketToClient) {
-        if (foundProblemInParameters(parameters.length, 3, socketToClient)) {
+        if (Util.foundProblemInParameters(parameters.length, 3, socketToClient)) {
             return true;
         }
 
@@ -273,7 +272,7 @@ public class Server implements Serializable {
     }
 
     private boolean foundRegistrationProblem(String[] parameters, Socket socket) {
-        if (foundProblemInParameters(parameters.length, 3, socket)) {
+        if (Util.foundProblemInParameters(parameters.length, 3, socket)) {
             return true;
         }
         String phoneNumber = parameters[1];
@@ -405,7 +404,7 @@ public class Server implements Serializable {
     }
 
     private boolean foundHostCreationProblem(String[] parameters,  Socket socketToHost) {
-        if (foundProblemInParameters(parameters.length, 4, socketToHost)) {
+        if (Util.foundProblemInParameters(parameters.length, 4, socketToHost)) {
             return true;
         }
 

@@ -1,8 +1,8 @@
-package tech.sobhan;
+package tech.sobhan.models;
 
 import lombok.*;
 
-import static tech.sobhan.DataGenerator.generateToken;
+import static tech.sobhan.utils.DataGenerator.generateToken;
 
 @Builder
 @AllArgsConstructor

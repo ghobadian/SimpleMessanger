@@ -1,4 +1,4 @@
-package tech.sobhan;
+package tech.sobhan.utils;
 
 import lombok.Synchronized;
 import org.json.simple.JSONObject;
@@ -51,6 +51,8 @@ public final class Util {
             out.writeUTF(signal);
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (NullPointerException e){
+            System.err.println("socket is null");
         }
     }
 
@@ -65,5 +67,13 @@ public final class Util {
             e.printStackTrace();
         }
         return null;
+    }
+
+    public static boolean foundProblemInParameters(int lengthOfParameters, int expectedLength, Socket socket) {
+        if (lengthOfParameters != expectedLength) {
+            sendSignal(socket, "ERROR some parameters are missing");
+            return true;
+        }
+        return false;
     }
 }

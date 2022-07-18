@@ -7,8 +7,8 @@ import org.junit.Test;
 import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
-import static tech.sobhan.Util.convertToJSON;
-import static tech.sobhan.Util.convertFromStringToArrayOfJSONObjects;
+import static tech.sobhan.utils.Util.convertToJSON;
+import static tech.sobhan.utils.Util.convertFromStringToArrayOfJSONObjects;
 
 public class UtilTest {
     @Test

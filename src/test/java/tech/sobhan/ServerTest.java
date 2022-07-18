@@ -1,13 +1,17 @@
 package tech.sobhan;
 
 import org.junit.Test;
+import tech.sobhan.client.Client;
+import tech.sobhan.host.Host;
+import tech.sobhan.server.Server;
+import tech.sobhan.workspace.Workspace;
 
 import java.net.Socket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static tech.sobhan.FileHandler.loadFromFile;
-import static tech.sobhan.FileHandler.saveToFile;
+import static tech.sobhan.utils.FileHandler.loadFromFile;
+import static tech.sobhan.utils.FileHandler.saveToFile;
 
 public class ServerTest {
     private static final Server server = new Server();

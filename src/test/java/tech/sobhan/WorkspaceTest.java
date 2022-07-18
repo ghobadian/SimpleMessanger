@@ -4,10 +4,13 @@ import lombok.SneakyThrows;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.junit.Test;
+import tech.sobhan.host.HostProgram;
+import tech.sobhan.server.ServerProgram;
+import tech.sobhan.workspace.Workspace;
 
 import java.util.Arrays;
 
-import static tech.sobhan.Util.convertToJSON;
+import static tech.sobhan.utils.Util.convertToJSON;
 
 public class WorkspaceTest {
     @Test

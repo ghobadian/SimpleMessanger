@@ -1,5 +1,6 @@
 package tech.sobhan;
 
+import tech.sobhan.models.Token;
 import org.junit.Test;
 
 import static org.junit.Assert.assertNotEquals;

@@ -1,4 +1,4 @@
-package tech.sobhan;
+package tech.sobhan.models;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
