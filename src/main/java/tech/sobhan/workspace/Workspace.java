@@ -16,7 +16,7 @@ import java.util.HashMap;
 
 @AllArgsConstructor
 @Builder
-public class Workspace /*extends Thread*/ implements Serializable{
+public class Workspace implements Serializable{
     @Getter private String workspaceName;
     @Getter private String address;
     @Getter private int port;
@@ -66,7 +66,7 @@ public class Workspace /*extends Thread*/ implements Serializable{
         usernameAndChats.get(username).add(chat);
     }
 
-    public void saveMessage(JSONObject message){//todo add isRead to message
+    public void saveMessage(JSONObject message){
         messages.add(message);
     }
 
@@ -183,7 +183,7 @@ public class Workspace /*extends Thread*/ implements Serializable{
         return null;
     }
 
-    public boolean isDuplicate(String usernameOfClient) {
+    public boolean foundUser(String usernameOfClient) {
         return idAndUsername.containsValue(usernameOfClient);
     }
 

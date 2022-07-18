@@ -45,4 +45,11 @@ public class UtilTest {
         System.out.println(string);
         System.out.println(Arrays.toString(convertFromStringToArrayOfJSONObjects(arr.toString())));
     }
+
+    @Test
+    public void parametersTest(){
+        String command = "hello from Iran";
+        String[] parameters = command.split(" ", 100);
+        System.out.println(Arrays.toString(parameters));
+    }
 }

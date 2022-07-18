@@ -4,13 +4,13 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 
 public class DataGenerator {
-    private static int id = 1000;
+    private static final int id = 1000;
 
     public static final SecureRandom RANDOM = new SecureRandom();
 
-    private static int[] portRange = {10000,10100};
+    private static final int[] portRange = {10000,10100};
 
-    private static String address = "127.0.0.0";
+    private static final String address = "127.0.0.0";
 
     public static int generateID(){
         return RANDOM.nextInt(1000,10000);//check for duplication

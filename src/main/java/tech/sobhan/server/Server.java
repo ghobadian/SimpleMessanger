@@ -69,13 +69,13 @@ public class Server implements Serializable {
             case "show-hosts" -> showList(hosts);
             case "show-active-hosts" -> showList(connectedHosts);
             case "show-clients" -> showList(clients);
-            default -> System.out.println("ERROR unknown command");
+            default -> System.err.println("ERROR unknown command");
         }
     }
 
     private void showList(ArrayList<?> list) {
         if(list.isEmpty()){
-            System.out.println("ERROR nothing was found");
+            System.err.println("ERROR nothing was found");
             return;
         }
         list.forEach(System.out::println);
@@ -88,7 +88,7 @@ public class Server implements Serializable {
             case "create-host" -> createHost(parameters, currentSocket);
             case "connect-host" -> connectHost(parameters, currentSocket);
             case "register" -> registerClient(parameters, currentSocket);
-            case "login" -> loginClient(parameters, currentSocket);//todo sus for socket
+            case "login" -> loginClient(parameters, currentSocket);
             case "create-workspace" -> createWorkspace(parameters, currentSocket);
             case "connect-workspace" -> connectClientToWorkspace(parameters, currentSocket);
             case "show-workspaces" -> showWorkspaces(currentSocket);
@@ -234,7 +234,7 @@ public class Server implements Serializable {
     }
 
     private void loginClient(String[] parameters, Socket socketToClient) {
-        if (foundLoginProblem(parameters, socketToClient)) {//todo is already connected
+        if (foundLoginProblem(parameters, socketToClient)) {
             return;
         }
         String phoneNumber = parameters[1];
@@ -260,7 +260,7 @@ public class Server implements Serializable {
     }
 
     private void registerClient(String[] parameters, Socket socket) {
-        if (foundRegistrationProblem(parameters, socket)) {//todo
+        if (foundRegistrationProblem(parameters, socket)) {
             return;
         }
 
@@ -373,14 +373,14 @@ public class Server implements Serializable {
             sendSignal(socketToClient, response);
             return false;
         }
-        sendSignal(socketToClient, "OK " + chosenHost.getAddress() + " " + chosenPort);//todo why address
+        sendSignal(socketToClient, "OK " + chosenHost.getAddress() + " " + chosenPort);
         saveWorkspace(chosenHost, commandForHost);
         return true;
     }
 
     private void saveWorkspace(Host parent, String command) {
         String[] parameters = command.split(" ");
-        String nameOfWorkSpace = parameters[1];//todo it is duplicate with the ones in createWorkspace() in Host class
+        String nameOfWorkSpace = parameters[1];
         int port = Integer.parseInt(parameters[2]);
         int clientID = Integer.parseInt(parameters[3]);//todo find usage
         parent.addWorkspace(Workspace.builder().workspaceName(nameOfWorkSpace).port(port).

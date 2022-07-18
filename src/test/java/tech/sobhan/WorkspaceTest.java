@@ -25,7 +25,7 @@ public class WorkspaceTest {
 
     @Test
     public void duplicateClientsTest(){
-        ServerProgram.main(new String[0]);//todo use integration testing
+        ServerProgram.main(new String[0]);
         System.out.println("**************8");
         HostProgram.main(new String[0]);
 

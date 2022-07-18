@@ -10,13 +10,11 @@ import tech.sobhan.utils.Util;
 
 import java.net.Socket;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class ClientTest {
-    private static MockedStatic<Util> utilMock = Mockito.mockStatic(Util.class);
+    private static final MockedStatic<Util> utilMock = Mockito.mockStatic(Util.class);
     private static final Client client = mock(Client.class);
 
     private static final Socket socketMock = mock(Socket.class);

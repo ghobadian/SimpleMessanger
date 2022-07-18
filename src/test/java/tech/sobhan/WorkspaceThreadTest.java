@@ -39,7 +39,6 @@ public class WorkspaceThreadTest {
         WorkspaceThread workspaceThreadMock = Mockito.mock(WorkspaceThread.class);
         Workspace workspaceMock = Mockito.mock(Workspace.class);
         when(workspaceThreadMock.getParent()).thenReturn(workspaceMock);
-//        workspaceThreadMock.setParent(workspaceMock);
         when(workspaceThreadMock.requestIdFromServer(anyString())).thenReturn(1234);
         when(workspaceThreadMock.getParent().findUsername(anyInt())).thenReturn("mmd");
         workspaceThreadMock.connectClient("");

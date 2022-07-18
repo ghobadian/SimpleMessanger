@@ -13,10 +13,6 @@ public class Token {
     private final long startingTime = System.currentTimeMillis();
 
     public boolean checkExpiration(){
-        if((System.currentTimeMillis() - startingTime) > 300_000){
-            return true;
-        }else{
-            return false;
-        }
+        return (System.currentTimeMillis() - startingTime) > 300_000;
     }
 }

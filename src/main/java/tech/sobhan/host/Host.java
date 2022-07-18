@@ -1,15 +1,13 @@
 package tech.sobhan.host;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.*;
+import tech.sobhan.utils.FileHandler;
 import tech.sobhan.utils.ScannerWrapper;
 import tech.sobhan.workspace.Workspace;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 
 import static tech.sobhan.server.Server.SERVER_ADDRESS;
@@ -31,12 +29,15 @@ public class Host implements Serializable {
 
     public boolean requestCreatingHost(String request){
         setSocketToServer(SERVER_ADDRESS, SERVER_PORT);
-        sendSignal(socketToServer, request);
-        String response = receiveSignalFromServer(socketToServer);
-        System.out.println(response);//
-        if(!response.startsWith("OK")){
+        if(socketToServer==null){
             return false;
         }
+        sendSignal(socketToServer, request);
+        String response = receiveSignalFromServer(socketToServer);
+        if(response==null || !response.startsWith("OK")){
+            return false;
+        }
+        System.out.println(response);//
         int portForSecondConnection = Integer.parseInt(response.split(" ")[1]);
         response = requestCode(portForSecondConnection);
         String code = response.split(" ")[1];
@@ -80,24 +81,14 @@ public class Host implements Serializable {
             command = ScannerWrapper.nextLine();
             handleLocalCommand(command);
         }
-        saveToFile();
+        FileHandler.saveToFile(workspaces);
     }
 
     private void handleLocalCommand(String command) {
         switch(command){
             case "show-workspaces" -> workspaces.forEach(System.out::println);
-            default -> System.out.println("ERROR unknown command");
+            default -> System.err.println("ERROR unknown command");
             //            case "shutdown" -> shutdownHost();//todo
-        }
-    }
-
-    private void saveToFile() {//todo move to file handler
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        try {
-            mapper.writeValue(Paths.get("src/main/resources/host/workspaces.txt").toFile(), workspaces);
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -125,7 +116,7 @@ public class Host implements Serializable {
             return false;
         }
         Thread otherDevicesThread = new Thread(this::getInputFromOtherDevices);
-        otherDevicesThread.start();//todo
+        otherDevicesThread.start();
         return true;
     }
 
@@ -137,7 +128,7 @@ public class Host implements Serializable {
         }
         workspaces.add(createdWorkspace);
         createdWorkspace.run();
-//                createdWorkspace.start();//todo ask
+//        createdWorkspace.start();
     }
 
     private void sendWorkspacesToServer() {
@@ -175,7 +166,7 @@ public class Host implements Serializable {
     private Workspace createWorkspace(String[] parameters){
         String nameOfWorkSpace = parameters[1];
         int port = Integer.parseInt(parameters[2]);
-        int clientID = Integer.parseInt(parameters[3]);//todo find usage
+        int clientID = Integer.parseInt(parameters[3]);//useless for now
         if(foundWorkspaceCreationProblem(port)){
             return null;
         }

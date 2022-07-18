@@ -24,7 +24,7 @@ public class WorkspaceThread extends Thread{
     public void run() {
         String responseFromClient = "";
         while(!responseFromClient.equals("disconnect")){
-            responseFromClient = receiveSignal(socketFromClient);//todo here
+            responseFromClient = receiveSignal(socketFromClient);
             System.out.println(responseFromClient);
             handleCommand(responseFromClient);
         }
@@ -41,7 +41,7 @@ public class WorkspaceThread extends Thread{
             case "disconnect" -> disconnectClient();
             case "read-messages" -> showUnreadMessages();
             case "change-message" -> changeMessage(command);
-            case "create-group" -> createGroup(parameters[1]);
+            case "create-group" -> createGroup(parameters);
             case "add-to-group" -> addToGroup(command);
             case "join-group" -> joinGroup(command);
         }
@@ -49,14 +49,32 @@ public class WorkspaceThread extends Thread{
 
     private void joinGroup(String command) {
         String[] parameters = command.split(" ");
+        if(foundGroupJoiningProblem(parameters)){
+            return;
+        }
         String groupName = parameters[1];
+        Group group = parent.findGroup(groupName);
+        group.addUser(currentClientUsername);
+        sendNotification(groupName, group);
+    }
+
+    private boolean foundGroupJoiningProblem(String[] parameters) {
+        if(foundProblemInParameters(parameters.length, 2, socketFromClient)){
+            return true;
+        }
+
+        String groupName = parameters[1];
+        if(!parent.foundGroup(groupName)){
+            sendSignal(socketFromClient, "ERROR group not found");
+            return true;
+        }
+
         Group group = parent.findGroup(groupName);
         if(group.getAttendees().contains(currentClientUsername)){
             sendSignal(socketFromClient, "ERROR you have already joined this group");
-            return;
+            return true;
         }
-        group.addUser(currentClientUsername);
-        sendNotification(groupName, group);
+        return false;
     }
 
     private void sendNotification(String groupName, Group group){
@@ -69,23 +87,30 @@ public class WorkspaceThread extends Thread{
 
     private void addToGroup(String command) {
         String[] parameters = command.split(" ");
+        if (foundGroupAddingProblem(parameters)) {
+            return;
+        }
         String username = parameters[1];
         String groupName = parameters[2];
         Group group = parent.findGroup(groupName);
-        if (checkForErrors(username, group)) {
-            return;
-        }
+
         group.addUser(username);
         sendSignal(socketFromClient, "OK user '"+username+"' added to group '"+groupName+"'");
     }
 
-    private boolean checkForErrors(String username, Group group){
-        if(group ==null){
+    private boolean foundGroupAddingProblem(String[] parameters){
+        if(foundProblemInParameters(parameters.length, 3, socketFromClient)){
+            return true;
+        }
+
+        String groupName = parameters[2];
+        if(!parent.foundGroup(groupName)){
             sendSignal(socketFromClient, "group not found");
             return true;
         }
 
-        if(!parent.isDuplicate(username) && !parent.foundGroup(username)){
+        String username = parameters[1];
+        if(!parent.foundUser(username)){
             sendSignal(socketFromClient, "user not found");
             return true;
         }
@@ -97,24 +122,54 @@ public class WorkspaceThread extends Thread{
         return false;
     }
 
-    private void createGroup(String groupName) {
+    private void createGroup(String[] parameters) {
+        if(foundGroupCreationProblem(parameters)){
+            return;
+        }
+        String groupName = parameters[1];
         Group group = Group.builder().name(groupName).build();
         group.addUser(currentClientUsername);
         parent.addGroup(group);
         sendSignal(socketFromClient, "OK group "+groupName+" created");
     }
 
+    private boolean foundGroupCreationProblem(String[] parameters) {
+        if(foundProblemInParameters(parameters.length, 2, socketFromClient)){
+            return true;
+        }
+
+        String groupName = parameters[1];
+        if(parent.foundGroup(groupName)){
+            sendSignal(socketFromClient, "ERROR choose another name");
+            return true;
+        }
+
+        return false;
+    }
+
     private void changeMessage(String command) {
         String[] parameters = command.split(" ",3);
+        if(foundMessageChangingProblem(parameters)){
+            return;
+        }
         String seq = parameters[1];
         String newMessage = parameters[2];
+        parent.replaceMessage(seq,newMessage);
+        sendSignal(socketFromClient, "OK");
+    }
+
+    private boolean foundMessageChangingProblem(String[] parameters) {
+        if(foundProblemInParameters(parameters.length, 3, socketFromClient)){
+            return true;
+        }
+        String seq = parameters[1];
         JSONObject oldMessage = parent.findMessage(seq);
         if(!oldMessage.get("from").equals(currentClientUsername)){
             sendSignal(socketFromClient, "ERROR access denied");
-            return;
+            return true;
         }
-        parent.replaceMessage(seq,newMessage);
-        sendSignal(socketFromClient, "OK");
+
+        return false;
     }
 
     private void showUnreadMessages() {
@@ -167,7 +222,7 @@ public class WorkspaceThread extends Thread{
             return true;
         }
 
-        if(!parent.isDuplicate(receiver)){
+        if(!parent.foundUser(receiver) && !parent.foundGroup(receiver)){
             sendSignal(socketFromClient, "ERROR username does not exist.");
             return true;
         }
@@ -197,7 +252,7 @@ public class WorkspaceThread extends Thread{
         saveChats(message, currentClientUsername, receiverUsername);
     }
 
-    private void saveChats(JSONObject message, String senderUsername, String receiverUsername) {//todo check this method
+    private void saveChats(JSONObject message, String senderUsername, String receiverUsername) {
         if(parent.alreadyChatting(senderUsername, receiverUsername)){
             if(message.get("isRead").equals(false)){
                 JSONObject receiverChat = parent.findChatOf(receiverUsername,senderUsername);
@@ -238,10 +293,9 @@ public class WorkspaceThread extends Thread{
         String usernameOfClient;
         while(response.startsWith("is-duplicate")){
             usernameOfClient = response.split(" ", 2)[1];
-            boolean isDuplicate = parent.isDuplicate(usernameOfClient);
+            boolean isDuplicate = parent.foundUser(usernameOfClient);
             sendSignal(socketFromClient, isDuplicate ? "YES" : "NO");
             response = receiveSignal(socketFromClient);
-//            usernameOfClient = response.split(" ", 2)[1];
         }
         usernameOfClient = response;
         parent.saveIdAndUsername(idOfClient,usernameOfClient);

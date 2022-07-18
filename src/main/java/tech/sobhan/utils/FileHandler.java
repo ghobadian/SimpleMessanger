@@ -1,10 +1,14 @@
 package tech.sobhan.utils;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import tech.sobhan.client.Client;
 import tech.sobhan.host.Host;
 import tech.sobhan.server.Server;
+import tech.sobhan.workspace.Workspace;
 
 import java.io.*;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 
 public class FileHandler {
@@ -60,5 +64,15 @@ public class FileHandler {
         out.writeObject(hosts);
         out.flush();
         out.close();
+    }
+
+    public static void saveToFile(ArrayList<Workspace> workspaces) {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        try {
+            mapper.writeValue(Paths.get("src/main/resources/host/workspaces.txt").toFile(), workspaces);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

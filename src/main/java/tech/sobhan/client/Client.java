@@ -76,7 +76,7 @@ public class Client implements Serializable {
                     otherDevicesThread.start();
                 }
             }
-            default -> System.out.println("ERROR unknown command");
+            default -> System.err.println("ERROR unknown command");
         }
     }
 
@@ -89,25 +89,23 @@ public class Client implements Serializable {
 
     private void handleServerRelatedCommand(String command) {
         if (command.startsWith("create-workspace") && !isLoggedIn) {
-            System.out.println("ERROR plz log in");
+            System.err.println("ERROR plz log in first");
             return;
         }
-        try {
-            Socket socketToServer = new Socket(SERVER_ADDRESS, SERVER_PORT);
+        try (Socket socketToServer = new Socket(SERVER_ADDRESS, SERVER_PORT)){
             sendSignal(socketToServer, command);
             String response = receiveSignal(socketToServer);
             System.out.println(response);//
-            if (response.startsWith("OK") && command.startsWith("login")) {//todo not clean at allllll
+            if (response.startsWith("OK") && command.startsWith("login")) {
                 isLoggedIn = true;
             }
-            socketToServer.close();
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("ERROR Server is not up");
         }
     }
 
     private boolean isRelatedToServer(String mainCommand) {
-        String[] mainCommands = {"register", "login", "create-workspace", "show-workspaces", "show-connected-workspaces"};//todo maybe add connect-workspace
+        String[] mainCommands = {"register", "login", "create-workspace", "show-workspaces", "show-connected-workspaces"};
         for (String command : mainCommands) {
             if (command.equals(mainCommand)) {
                 return true;
@@ -118,14 +116,14 @@ public class Client implements Serializable {
 
     private void handleWorkspaceRelatedCommand(String command) {
         if (socketToWorkspace == null) {
-            System.out.println("ERROR You are not connected to a workspace");
+            System.err.println("ERROR You are not connected to a workspace");
             return;
         }
         sendSignal(socketToWorkspace, command);
     }
 
     private boolean isRelatedToWorkspace(String mainCommand) {
-        String[] mainCommands = {"send-message", "get-chats", "get-messages", "read-messages", "disconnect",//todo move somewhere else
+        String[] mainCommands = {"send-message", "get-chats", "get-messages", "read-messages", "disconnect",
                 "change-message", "create-group", "add-to-group", "join-group"};
         for (String command : mainCommands) {
             if (command.equals(mainCommand)) {
@@ -137,7 +135,7 @@ public class Client implements Serializable {
 
     public boolean requestConnectToWorkspace(String request) {
         if (!isLoggedIn) {
-            System.out.println("ERROR plz log in first");
+            System.err.println("ERROR plz log in first");
             return false;
         }
         String responseFromServer = requestTokenFromServer(request);
@@ -150,7 +148,7 @@ public class Client implements Serializable {
 
     public boolean connectToWorkspace(String responseFromServer) {
         if (socketToWorkspace != null) {
-            System.out.println("ERROR You have already connected to a workspace");
+            System.err.println("ERROR You have already connected to a workspace");
             return false;
         }
         String[] parameters = responseFromServer.split(" ");
@@ -160,10 +158,11 @@ public class Client implements Serializable {
         setSocketToWorkspace(workspaceAddress, workspacePort);
         sendSignal(socketToWorkspace, "connect " + token);
         String responseFromWorkspace = receiveSignal(socketToWorkspace);
-        System.out.println(responseFromWorkspace);
         if (responseFromWorkspace.startsWith("ERROR")) {
+            System.err.println(responseFromWorkspace);
             return false;
         }
+        System.out.println(responseFromWorkspace);
         sendUsernameIfNeeded(responseFromWorkspace);
         return true;
     }
@@ -190,7 +189,7 @@ public class Client implements Serializable {
         String responseFromWorkspace;
         String usernameOfClient = ScannerWrapper.nextLine();
         while(isDuplicate(usernameOfClient)){
-            System.out.println("ERROR username already exists.");
+            System.err.println("ERROR username already exists.");
             usernameOfClient = ScannerWrapper.nextLine();
         }
         sendSignal(socketToWorkspace, usernameOfClient);
