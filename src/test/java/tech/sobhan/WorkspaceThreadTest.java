@@ -14,24 +14,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
-import static tech.sobhan.server.Server.SERVER_ADDRESS;
-import static tech.sobhan.server.Server.SERVER_PORT;
 import static tech.sobhan.utils.Util.convertToJSON;
 
 public class WorkspaceThreadTest {
     @Test
     @SneakyThrows
     public void addSeqTest(){
-        Socket socket = new Socket(SERVER_ADDRESS,SERVER_PORT);
+        Socket socket = new Socket();
         Workspace workspace = Workspace.builder().workspaceName("name").port(1234)
                 .address("address").socketToServer(socket).build();
         JSONObject message = convertToJSON("{\"type\":\"text\",\"body\":\"khub\"}");
-        System.out.println(message);
-        assert message != null;
+        if(message == null){
+            System.err.println("ERROR message is null in addSeqTest()");
+            return;
+        }
         workspace.addSeq(message);
         workspace.addSeq(message);
         workspace.addSeq(message);
-        System.out.println(message);
+        assertEquals(Integer.parseInt((String) message.get("seq")), 3);
+        workspace.addSeq(message);
+        assertEquals(Integer.parseInt((String) message.get("seq")), 4);
     }
 
     @Test
